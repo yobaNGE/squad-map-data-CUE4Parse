@@ -1,3 +1,5 @@
+using Squad_pipeline_map_data_CUE4Parse.Configuration;
+
 namespace AssetInspector;
 
 internal sealed record InspectorArguments(
@@ -43,12 +45,17 @@ internal sealed record InspectorArguments(
             }
         }
 
-        if (string.IsNullOrWhiteSpace(squadPath) || string.IsNullOrWhiteSpace(mappingsPath) || values.Count < 2)
+        if (string.IsNullOrWhiteSpace(squadPath) || values.Count < 2)
+            throw new ArgumentException(Usage);
+        var mappingsCommand = values[0].Equals("schema", StringComparison.OrdinalIgnoreCase)
+                              || values[0].Equals("schema-find", StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(mappingsPath)
+            && (!ContentLayoutDetector.Detect(squadPath).IsEditorSdk || mappingsCommand))
             throw new ArgumentException(Usage);
 
         return new InspectorArguments(
             squadPath,
-            mappingsPath,
+            mappingsPath ?? string.Empty,
             values[0].ToLowerInvariant(),
             values[1],
             Math.Max(0, depth),
@@ -62,18 +69,20 @@ internal sealed record InspectorArguments(
 
     public const string Usage = """
         AssetInspector usage:
-          AssetInspector --squad <path> --mappings <usmap> find <text> [--limit 100]
-          AssetInspector --squad <path> --mappings <usmap> inspect <package-or-object> [--type ExportType] [--depth 2] [--limit 100] [--output file]
-          AssetInspector --squad <path> --mappings <usmap> metadata <layer-name> [--source vanilla|mod-id] [--output file]
-          AssetInspector --squad <path> --mappings <usmap> benchmark <layer-name-filter|all> [--limit 300] [--source vanilla|mod-id] [--output file]
-          AssetInspector --squad <path> --mappings <usmap> catalog all
+          AssetInspector --squad <path> [--mappings <usmap>] find <text> [--limit 100]
+          AssetInspector --squad <path> [--mappings <usmap>] inspect <package-or-object> [--type ExportType] [--depth 2] [--limit 100] [--output file]
+          AssetInspector --squad <path> [--mappings <usmap>] inspect-script <package> [--type Function] [--depth 2] [--limit 100]
+          AssetInspector --squad <path> [--mappings <usmap>] metadata <layer-name> [--source vanilla|mod-id] [--output file]
+          AssetInspector --squad <path> [--mappings <usmap>] benchmark <layer-name-filter|all> [--limit 300] [--source vanilla|mod-id] [--output file]
+          AssetInspector --squad <path> [--mappings <usmap>] catalog all
           AssetInspector --squad <path> --mappings <usmap> schema <type-name>
           AssetInspector --squad <path> --mappings <usmap> schema-find <text> [--limit 100]
-          AssetInspector --squad <path> --mappings <usmap> registry <text> [--limit 100]
-          AssetInspector --squad <path> --mappings <usmap> primary-assets <primary-asset-type> [--mount /Plugin/] [--limit 100]
-          AssetInspector --squad <path> --mappings <usmap> unit-vehicles <unit-object-path> --level <level-object-path>
-          AssetInspector --squad <path> --mappings <usmap> commander-trace <unit-object-path> --level <world-object-path>
+          AssetInspector --squad <path> [--mappings <usmap>] registry <text> [--limit 100]
+          AssetInspector --squad <path> [--mappings <usmap>] primary-assets <primary-asset-type> [--mount /Plugin/] [--limit 100]
+          AssetInspector --squad <path> [--mappings <usmap>] unit-vehicles <unit-object-path> --level <level-object-path>
+          AssetInspector --squad <path> [--mappings <usmap>] commander-trace <unit-object-path> --level <world-object-path>
 
-        SQUAD_PATH and SQUAD_MAPPINGS environment variables can replace the two path options.
+        SQUAD_PATH and SQUAD_MAPPINGS environment variables can replace the path options.
+        Mappings are optional for uncooked Squad SDK assets and required for cooked game content.
         """;
 }

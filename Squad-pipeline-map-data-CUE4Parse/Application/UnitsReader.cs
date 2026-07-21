@@ -62,11 +62,7 @@ internal sealed class UnitsReader
             var vehicles = _vehicles.Read(template.ObjectPath, biome, ticketRules, killerTeam)
                 .Select(ToUnitVehicle)
                 .ToArray();
-            var commanderAssets = _commanderAssets.Read(
-                template.ObjectPath,
-                template.FactionId,
-                biome,
-                context);
+            var commanderAssets = _commanderAssets.Read(template.FactionId, context);
             result.Add(template.ToUnit(vehicles, commanderAssets));
         }
 

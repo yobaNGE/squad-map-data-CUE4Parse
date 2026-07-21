@@ -12,13 +12,15 @@ try
 {
     var options = InspectorArguments.Parse(args);
     var modDiscovery = new WorkshopModDiscovery();
-    var workshopPath = modDiscovery.ResolveWorkshopPath(options.SquadPath);
+    var layout = ContentLayoutDetector.Detect(options.SquadPath);
+    var workshopPath = layout.IsEditorSdk ? string.Empty : modDiscovery.ResolveWorkshopPath(options.SquadPath);
     var profile = new ArchiveProfile
     {
         SquadPath = options.SquadPath,
         MappingsPath = options.MappingsPath,
         WorkshopPath = workshopPath,
-        Mods = modDiscovery.Discover(workshopPath),
+        Mods = layout.IsEditorSdk ? [] : modDiscovery.Discover(workshopPath),
+        SdkPlugins = layout.IsEditorSdk ? new SdkPluginDiscovery().Discover(options.SquadPath) : [],
         ReadScriptData = false
     };
 
@@ -29,7 +31,11 @@ try
             Mods = options.SourceId.Equals("vanilla", StringComparison.OrdinalIgnoreCase)
                 ? []
                 : profile.Mods.Where(mod =>
-                    mod.Id.Equals(options.SourceId, StringComparison.OrdinalIgnoreCase)).ToArray()
+                    mod.Id.Equals(options.SourceId, StringComparison.OrdinalIgnoreCase)).ToArray(),
+            SdkPlugins = options.SourceId.Equals("vanilla", StringComparison.OrdinalIgnoreCase)
+                ? []
+                : profile.SdkPlugins.Where(plugin =>
+                    plugin.Id.Equals(options.SourceId, StringComparison.OrdinalIgnoreCase)).ToArray()
         };
     using var provider = new GameAssetProvider(selectedProfile);
     await provider.InitializeAsync();
@@ -38,6 +44,7 @@ try
     {
         "find" => Find(provider, options.Query, options.Limit),
         "inspect" => Inspect(provider, options),
+        "inspect-script" => Inspect(provider, options, true),
         "metadata" => await ReadMetadata(provider, options.Query),
         "benchmark" => await Benchmark(provider, options.Query, options.Limit),
         "catalog" => JsonSerializer.SerializeToNode(await new LayerCatalogService(
@@ -74,7 +81,7 @@ static JsonArray Find(IGameAssetProvider provider, string query, int limit)
     return result;
 }
 
-static JsonObject Inspect(IGameAssetProvider provider, InspectorArguments options)
+static JsonObject Inspect(IGameAssetProvider provider, InspectorArguments options, bool scriptData = false)
 {
     var inspector = new AssetGraphInspector(options.Depth, options.Limit);
     if (options.Query.StartsWith('/') && provider.LoadObject(options.Query) is { } directObject)
@@ -92,7 +99,10 @@ static JsonObject Inspect(IGameAssetProvider provider, InspectorArguments option
     foreach (var package in packages)
     {
         var exports = new JsonArray();
-        foreach (var export in provider.LoadPackageExports(package)
+        var packageExports = scriptData
+            ? provider.LoadPackageExportsWithScriptData(package)
+            : provider.LoadPackageExports(package);
+        foreach (var export in packageExports
                      .Where(export => options.ExportType is null
                                       || export.ExportType.Equals(options.ExportType, StringComparison.OrdinalIgnoreCase))
                      .Take(options.Limit))
@@ -205,22 +215,35 @@ static JsonNode InspectCommander(IGameAssetProvider provider, InspectorArguments
     var world = provider.LoadObject(worldPath)
                 ?? throw new InvalidDataException($"World '{worldPath}' was not found.");
     var properties = new UnrealPropertyReader(provider);
+    var rows = new DataTableRowResolver(properties);
 
     var availability = new JsonArray();
     foreach (var reference in properties.ArrayInherited(unit, "Actions"))
     {
         var item = properties.ResolveObject(reference);
         var setting = properties.ObjectInherited(item, "Setting");
+        var settingData = rows.Resolve(setting);
         var firstVersion = properties.ArrayInherited(setting, "ActionVersions")
             .Select(UnrealPropertyReader.Unwrap)
             .OfType<CUE4Parse.UE4.Assets.Exports.IPropertyHolder>()
             .FirstOrDefault();
+        var actionActor = firstVersion is null
+            ? null
+            : properties.ResolveObject(properties.RawStartingWith(firstVersion, "ActionActor_"));
         availability.Add(new JsonObject
         {
             ["availability"] = item?.GetPathName(),
             ["setting"] = setting?.GetPathName(),
-            ["actionActor"] = firstVersion is null ? null : properties.ResolveObject(
-                properties.RawStartingWith(firstVersion, "ActionActor_"))?.GetPathName()
+            ["settingRow"] = settingData is null
+                ? null
+                : new JsonObject(settingData.Row.Properties.Select(property =>
+                    new KeyValuePair<string, JsonNode?>(
+                        property.Name.Text,
+                        JsonValue.Create(
+                            properties.ResolveObject(property.Tag?.GenericValue)?.GetPathName()
+                            ?? UnrealPropertyReader.ToStringValue(property.Tag?.GenericValue))))),
+            ["actionActor"] = actionActor?.GetPathName(),
+            ["actionActorHierarchy"] = JsonSerializer.SerializeToNode(CommandClassHierarchy(actionActor))
         });
     }
 
@@ -236,11 +259,13 @@ static JsonNode InspectCommander(IGameAssetProvider provider, InspectorArguments
         foreach (var pair in table.RowMap.Take(options.Limit))
         {
             var command = properties.Object(pair.Value, "CommandData");
+            var commandActor = properties.ObjectInherited(command, "CommandActor");
             commands.Add(new JsonObject
             {
                 ["row"] = pair.Key.Text,
                 ["command"] = command?.GetPathName(),
-                ["commandActor"] = properties.ObjectInherited(command, "CommandActor")?.GetPathName(),
+                ["commandActor"] = commandActor?.GetPathName(),
+                ["commandActorHierarchy"] = JsonSerializer.SerializeToNode(CommandClassHierarchy(commandActor)),
                 ["displayName"] = properties.StringInherited(command, string.Empty, "DisplayName"),
                 ["icon"] = properties.ObjectInherited(command, "Texture", "Icon")?.Name,
                 ["cooldown"] = properties.DoubleInherited(command, 0, "CooldownDuration"),
@@ -260,6 +285,19 @@ static JsonNode InspectCommander(IGameAssetProvider provider, InspectorArguments
         ["availability"] = availability,
         ["commands"] = commands
     };
+}
+
+static IReadOnlyList<string> CommandClassHierarchy(CUE4Parse.UE4.Assets.Exports.UObject? source)
+{
+    var result = new List<string>();
+    for (var current = source as CUE4Parse.UE4.Objects.UObject.UClass; current is not null;)
+    {
+        result.Add(current.GetPathName());
+        current = current.SuperStruct?.TryLoad<CUE4Parse.UE4.Objects.UObject.UClass>(out var parent) == true
+            ? parent
+            : null;
+    }
+    return result;
 }
 
 static JsonNode InspectSchema(string mappingsPath, string query)

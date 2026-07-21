@@ -162,9 +162,20 @@ public sealed class UnrealPropertyReader(IGameAssetProvider assets)
             if (!visitedClasses.Add(unrealClass.GetPathName())) return;
             if (unrealClass.ClassDefaultObject?.TryLoad(out UObject? classDefaultObject) == true)
                 Add(classDefaultObject);
+            else
+                Add(assets.LoadObject(InferClassDefaultObjectPath(unrealClass)));
             if (unrealClass.SuperStruct?.TryLoad<UClass>(out var superClass) == true)
                 AddClassDefaults(superClass);
         }
+    }
+
+    private static string InferClassDefaultObjectPath(UClass unrealClass)
+    {
+        var classPath = unrealClass.GetPathName();
+        var separator = classPath.LastIndexOf('.');
+        if (separator < 0) return string.Empty;
+        var className = classPath[(separator + 1)..];
+        return $"{classPath[..separator]}.Default__{className}";
     }
 
     public static object? Unwrap(object? value) => value switch

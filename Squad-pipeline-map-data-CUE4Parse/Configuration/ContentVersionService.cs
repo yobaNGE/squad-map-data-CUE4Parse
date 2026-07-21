@@ -17,6 +17,22 @@ public sealed class ContentVersionService
 {
     public InstalledContentSource ReadVanilla(string squadPath)
     {
+        var layout = ContentLayoutDetector.Detect(squadPath);
+        if (layout.IsEditorSdk)
+        {
+            var versionFile = Path.Combine(layout.Root.FullName, "version.txt");
+            var sdkVersion = File.Exists(versionFile) ? File.ReadAllText(versionFile).Trim() : string.Empty;
+            var marker = File.Exists(versionFile) ? new FileInfo(versionFile) : new FileInfo(Path.Combine(layout.Root.FullName, "SquadGame.uproject"));
+            return new InstalledContentSource(
+                "vanilla",
+                "Squad SDK",
+                true,
+                true,
+                sdkVersion,
+                $"sdk:{sdkVersion}:{marker.Length}:{marker.LastWriteTimeUtc.Ticks}",
+                marker.Length);
+        }
+
         var executable = FindSquadExecutable(squadPath);
         if (executable is null)
             return new InstalledContentSource("vanilla", "Vanilla", true, true, string.Empty, string.Empty, 0);
@@ -41,6 +57,15 @@ public sealed class ContentVersionService
         mod.Version,
         mod.ContentRevision,
         mod.InstalledSize);
+
+    public InstalledContentSource FromSdkPlugin(SdkPluginProfile plugin) => new(
+        plugin.Id,
+        plugin.FriendlyName,
+        false,
+        plugin.Enabled,
+        plugin.Version,
+        plugin.ContentRevision,
+        plugin.InstalledSize);
 
     public string ReadMappingsSignature(string? path)
     {

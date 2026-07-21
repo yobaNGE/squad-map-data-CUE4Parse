@@ -13,11 +13,20 @@ public sealed record ModArchiveProfile(string Id, string FriendlyName, string It
     public long InstalledSize { get; init; }
 }
 
+public sealed record SdkPluginProfile(string Id, string FriendlyName, string PluginDirectory)
+{
+    public bool Enabled { get; init; } = true;
+    public string Version { get; init; } = string.Empty;
+    public string ContentRevision { get; init; } = string.Empty;
+    public long InstalledSize { get; init; }
+}
+
 public sealed record ArchiveProfile
 {
     public string SquadPath { get; init; } = string.Empty;
     public IReadOnlyList<string> ModDirectories { get; init; } = [];
     public IReadOnlyList<ModArchiveProfile> Mods { get; init; } = [];
+    public IReadOnlyList<SdkPluginProfile> SdkPlugins { get; init; } = [];
     public string? WorkshopPath { get; init; }
     public string? MappingsPath { get; init; }
     public string OutputDirectory { get; init; } = Path.Combine(Environment.CurrentDirectory, "output");
@@ -29,24 +38,20 @@ public sealed record ArchiveProfile
     [JsonIgnore]
     public bool ReadScriptData { get; init; }
 
-    public DirectoryInfo ResolvePaksDirectory()
-    {
-        var selected = new DirectoryInfo(SquadPath);
-        if (selected.Name.Equals("Paks", StringComparison.OrdinalIgnoreCase))
-            return selected;
+    public ContentLayout ResolveContentLayout() => ContentLayoutDetector.Detect(SquadPath);
 
-        var candidates = new[]
-        {
-            Path.Combine(selected.FullName, "SquadGame", "Content", "Paks"),
-            Path.Combine(selected.FullName, "Content", "Paks")
-        };
-        return new DirectoryInfo(candidates.FirstOrDefault(Directory.Exists) ?? selected.FullName);
-    }
+    public DirectoryInfo ResolvePaksDirectory() => ResolveContentLayout().ContentDirectory;
 
     [JsonIgnore]
     public IReadOnlyList<string> EffectiveModDirectories => Mods.Count > 0
         ? Mods.Where(mod => mod.Enabled).Select(mod => mod.PaksDirectory).ToArray()
         : ModDirectories;
+
+    [JsonIgnore]
+    public IReadOnlyList<string> EffectiveSdkPluginDirectories => SdkPlugins
+        .Where(plugin => plugin.Enabled)
+        .Select(plugin => plugin.PluginDirectory)
+        .ToArray();
 }
 
 public sealed class ProfileStore

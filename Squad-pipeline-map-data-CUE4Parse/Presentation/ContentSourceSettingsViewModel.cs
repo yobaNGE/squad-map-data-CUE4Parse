@@ -12,12 +12,14 @@ public sealed class ContentSourceSettingsViewModel : ObservableObject
     public ContentSourceSettingsViewModel(
         InstalledContentSource source,
         ModArchiveProfile? mod,
+        SdkPluginProfile? sdkPlugin,
         SourceCacheState cacheState,
         Action<ContentSourceSettingsViewModel> clear,
         Func<ContentSourceSettingsViewModel, Task> rebuild)
     {
         Source = source;
         Mod = mod;
+        SdkPlugin = sdkPlugin;
         _isEnabled = source.Enabled;
         _cacheState = cacheState;
         ClearCacheCommand = new RelayCommand(() => clear(this));
@@ -26,6 +28,7 @@ public sealed class ContentSourceSettingsViewModel : ObservableObject
 
     public InstalledContentSource Source { get; private set; }
     public ModArchiveProfile? Mod { get; }
+    public SdkPluginProfile? SdkPlugin { get; }
     public string Id => Source.Id;
     public string Name => Source.Name;
     public bool IsMod => !Source.IsVanilla;
@@ -64,7 +67,15 @@ public sealed class ContentSourceSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(CacheLayers));
     }
 
-    public ModArchiveProfile ToProfile() => (Mod ?? throw new InvalidOperationException()) with
+    public ModArchiveProfile ToModProfile() => (Mod ?? throw new InvalidOperationException()) with
+    {
+        Enabled = IsEnabled,
+        Version = Source.Version,
+        ContentRevision = Source.Revision,
+        InstalledSize = Source.InstalledSize
+    };
+
+    public SdkPluginProfile ToSdkPluginProfile() => (SdkPlugin ?? throw new InvalidOperationException()) with
     {
         Enabled = IsEnabled,
         Version = Source.Version,

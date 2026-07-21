@@ -40,9 +40,9 @@ public sealed class GameAssetProvider(
     public Task InitializeAsync(CancellationToken cancellationToken = default) => Task.Run(() =>
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var paks = Profile.ResolvePaksDirectory();
-        if (!paks.Exists)
-            throw new DirectoryNotFoundException($"Squad Paks directory was not found: {paks.FullName}");
+        var layout = Profile.ResolveContentLayout();
+        if (!layout.ContentDirectory.Exists)
+            throw new DirectoryNotFoundException($"Squad content directory was not found: {layout.ContentDirectory.FullName}");
 
         var mods = Profile.EffectiveModDirectories
             .Where(path => !string.IsNullOrWhiteSpace(path))
@@ -50,12 +50,18 @@ public sealed class GameAssetProvider(
             .ToArray();
 
         var version = new VersionContainer(EGame.GAME_Squad);
-        var provider = new DefaultFileProvider(
-            paks,
-            mods,
-            SearchOption.TopDirectoryOnly,
-            version,
-            StringComparer.OrdinalIgnoreCase);
+        DefaultFileProvider provider = layout.IsEditorSdk
+            ? new SquadSdkFileProvider(
+                layout,
+                Profile.EffectiveSdkPluginDirectories.Select(path => new DirectoryInfo(path)).ToArray(),
+                version,
+                StringComparer.OrdinalIgnoreCase)
+            : new DefaultFileProvider(
+                layout.ContentDirectory,
+                mods,
+                SearchOption.TopDirectoryOnly,
+                version,
+                StringComparer.OrdinalIgnoreCase);
         provider.ReadScriptData = Profile.ReadScriptData;
 
         if (!string.IsNullOrWhiteSpace(Profile.MappingsPath))
@@ -201,6 +207,10 @@ public sealed class GameAssetProvider(
             if (IsWithin(archivePath, mod.PaksDirectory))
                 return new ContentSource(mod.Id, mod.FriendlyName, false);
 
+        foreach (var plugin in Profile.SdkPlugins)
+            if (IsWithin(archivePath, plugin.PluginDirectory))
+                return new ContentSource(plugin.Id, plugin.FriendlyName, false);
+
         foreach (var directory in Profile.EffectiveModDirectories)
             if (IsWithin(archivePath, directory))
                 return new ContentSource(directory, Path.GetFileName(Path.TrimEndingDirectorySeparator(directory)), false);
@@ -314,14 +324,22 @@ public sealed class GameAssetProvider(
 
     public string CreateArchiveFingerprint()
     {
-        var roots = new[] { Profile.ResolvePaksDirectory().FullName }.Concat(Profile.EffectiveModDirectories);
-        var builder = new StringBuilder("squad-pipeline-v1\n");
+        var layout = Profile.ResolveContentLayout();
+        var roots = layout.IsEditorSdk
+            ? new[] { layout.ContentDirectory.FullName }
+                .Concat(EnumerateOfficialPluginContent(layout.Root))
+                .Concat(Profile.EffectiveSdkPluginDirectories.Select(path => Path.Combine(path, "Content")))
+            : new[] { layout.ContentDirectory.FullName }.Concat(Profile.EffectiveModDirectories);
+        var builder = new StringBuilder($"squad-pipeline-v2|{layout.Kind}\n");
         foreach (var root in roots.Order(StringComparer.OrdinalIgnoreCase))
         {
             if (!Directory.Exists(root)) continue;
-            foreach (var file in Directory.EnumerateFiles(root, "*.*", SearchOption.TopDirectoryOnly)
-                         .Where(path => path.EndsWith(".pak", StringComparison.OrdinalIgnoreCase)
-                                        || path.EndsWith(".utoc", StringComparison.OrdinalIgnoreCase))
+            var searchOption = layout.IsEditorSdk ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+            foreach (var file in Directory.EnumerateFiles(root, "*.*", searchOption)
+                         .Where(path => layout.IsEditorSdk
+                             ? SdkPluginDiscovery.IsRelevantFile(path)
+                             : path.EndsWith(".pak", StringComparison.OrdinalIgnoreCase)
+                               || path.EndsWith(".utoc", StringComparison.OrdinalIgnoreCase))
                          .Order(StringComparer.OrdinalIgnoreCase))
             {
                 var info = new FileInfo(file);
@@ -338,6 +356,21 @@ public sealed class GameAssetProvider(
         }
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
+    }
+
+    private static IEnumerable<string> EnumerateOfficialPluginContent(DirectoryInfo sdkRoot)
+    {
+        var pluginsRoot = Path.Combine(sdkRoot.FullName, "Plugins");
+        if (!Directory.Exists(pluginsRoot)) yield break;
+        foreach (var descriptor in Directory.EnumerateFiles(pluginsRoot, "*.uplugin", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(pluginsRoot, descriptor);
+            if (SdkPluginDiscovery.HasIgnoredSegment(relative)
+                || relative.Replace('\\', '/').StartsWith("Mods/", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var content = Path.Combine(Path.GetDirectoryName(descriptor)!, "Content");
+            if (Directory.Exists(content)) yield return content;
+        }
     }
 
     private DefaultFileProvider RequireProvider() =>
