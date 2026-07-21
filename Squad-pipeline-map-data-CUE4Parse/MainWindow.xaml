@@ -1,0 +1,481 @@
+<Window x:Class="Squad_pipeline_map_data_CUE4Parse.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Squad Pipeline"
+        Icon="Assets/squad-pipeline-icon.ico"
+        Width="1280"
+        Height="820"
+        MinWidth="1020"
+        MinHeight="660"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        Background="{StaticResource WindowBrush}"
+        FontFamily="Segoe UI"
+        FontSize="13"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="68"
+                            ResizeBorderThickness="6"
+                            CornerRadius="0"
+                            GlassFrameThickness="0" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="68" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="68" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource HeaderBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+            <Grid Margin="22,0,10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="36" Height="36" CornerRadius="8" Background="{StaticResource AccentBrush}" Margin="0,0,12,0">
+                        <TextBlock Text="SQ" Foreground="#18130B" FontWeight="Bold" FontSize="13"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Squad Pipeline" FontSize="17" FontWeight="SemiBold" />
+                        <TextBlock Text="Layer data exporter" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button Content="Scan content" Command="{Binding RefreshCommand}" Margin="0,0,8,0" />
+                    <Button Content="Settings" Command="{Binding OpenSettingsCommand}" />
+                </StackPanel>
+
+                <Border Grid.Column="3" Width="1" Height="26" Background="{StaticResource BorderBrush}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button Content="—" Style="{StaticResource WindowButton}" Click="Minimize_Click" ToolTip="Minimize" />
+                    <Button Content="□" Style="{StaticResource WindowButton}" Click="MaximizeRestore_Click" ToolTip="Maximize" />
+                    <Button Content="×" Style="{StaticResource WindowButton}" Click="Close_Click" ToolTip="Close" FontSize="18" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="24,18,24,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="14" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="9" Padding="16,13">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.8*" />
+                        <ColumnDefinition Width="1.05*" />
+                        <ColumnDefinition Width="1.05*" />
+                        <ColumnDefinition Width="1.05*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                        <TextBlock Text="SEARCH" Foreground="{StaticResource MutedTextBrush}" FontSize="10"
+                                   FontWeight="SemiBold" Margin="2,0,0,6" />
+                        <Grid>
+                            <TextBox x:Name="SearchBox"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Text="Search layers, maps or sources"
+                                       Foreground="{StaticResource SubtleTextBrush}"
+                                       Margin="12,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                        <TextBlock Text="MAP" Foreground="{StaticResource MutedTextBrush}" FontSize="10"
+                                   FontWeight="SemiBold" Margin="2,0,0,6" />
+                        <ComboBox ItemsSource="{Binding MapOptions}" SelectedItem="{Binding SelectedMap}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Margin="0,0,12,0">
+                        <TextBlock Text="GAME MODE" Foreground="{StaticResource MutedTextBrush}" FontSize="10"
+                                   FontWeight="SemiBold" Margin="2,0,0,6" />
+                        <ComboBox ItemsSource="{Binding GameModeOptions}" SelectedItem="{Binding SelectedGameMode}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="3" Margin="0,0,12,0">
+                        <TextBlock Text="SOURCE" Foreground="{StaticResource MutedTextBrush}" FontSize="10"
+                                   FontWeight="SemiBold" Margin="2,0,0,6" />
+                        <ComboBox ItemsSource="{Binding SourceOptions}" SelectedItem="{Binding SelectedSource}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="4">
+                        <TextBlock Text=" " FontSize="10" Margin="0,0,0,6" />
+                        <Button Content="Clear filters" Command="{Binding ResetFiltersCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="9">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="52" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                        <Grid Margin="16,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="Layers" FontSize="15" FontWeight="SemiBold" />
+                                <Border Background="#22292D" CornerRadius="10" Padding="8,2" Margin="10,0,0,0">
+                                    <TextBlock FontSize="11" Foreground="{StaticResource MutedTextBrush}">
+                                        <Run Text="{Binding VisibleCount, Mode=OneWay}" /><Run Text=" of " /><Run Text="{Binding TotalCount, Mode=OneWay}" />
+                                    </TextBlock>
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="Select the layers to export"
+                                       Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+
+                    <DataGrid Grid.Row="1"
+                              ItemsSource="{Binding LayersView}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserReorderColumns="True"
+                              CanUserResizeRows="False"
+                              IsReadOnly="False"
+                              RowHeight="44"
+                              VerticalContentAlignment="Center"
+                              AlternationCount="2">
+                        <DataGrid.Resources>
+                            <Style x:Key="CenteredCellText" TargetType="TextBlock">
+                                <Setter Property="VerticalAlignment" Value="Center" />
+                            </Style>
+                        </DataGrid.Resources>
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Width="56" CanUserSort="False">
+                                <DataGridTemplateColumn.Header>
+                                    <CheckBox HorizontalAlignment="Center" IsThreeState="False"
+                                              ToolTip="Select all visible layers"
+                                              IsChecked="{Binding DataContext.SelectAllVisible,
+                                                  RelativeSource={RelativeSource AncestorType=DataGrid}, Mode=TwoWay}" />
+                                </DataGridTemplateColumn.Header>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="LAYER" Binding="{Binding Name}" Width="2.35*" IsReadOnly="True"
+                                                ElementStyle="{StaticResource CenteredCellText}" />
+                            <DataGridTextColumn Header="MAP" Binding="{Binding MapId}" Width="1.15*" IsReadOnly="True"
+                                                ElementStyle="{StaticResource CenteredCellText}" />
+                            <DataGridTextColumn Header="GAME MODE" Binding="{Binding GameMode}" Width="1.15*" IsReadOnly="True"
+                                                ElementStyle="{StaticResource CenteredCellText}" />
+                            <DataGridTextColumn Header="VERSION" Binding="{Binding Version}" Width="0.72*" IsReadOnly="True"
+                                                ElementStyle="{StaticResource CenteredCellText}" />
+                            <DataGridTemplateColumn Header="SOURCE" Width="1.25*" IsReadOnly="True">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#232B30" BorderBrush="#303940" BorderThickness="1"
+                                                CornerRadius="5" Padding="8,3"
+                                                HorizontalAlignment="Left" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding SourceName}" FontSize="11" />
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Visibility="{Binding HasNoLayers, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Border Width="46" Height="46" CornerRadius="23" Background="{StaticResource SurfaceRaisedBrush}"
+                                HorizontalAlignment="Center" Margin="0,0,0,13">
+                            <TextBlock Text="≡" Foreground="{StaticResource MutedTextBrush}" FontSize="24"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="No layers loaded" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <TextBlock Text="Configure the Squad installation and mappings file to build the catalog."
+                                   Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,15" />
+                        <Button Content="Open settings" Command="{Binding OpenSettingsCommand}" HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <Border Grid.RowSpan="2" Panel.ZIndex="10" Background="#D9121619"
+                            Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">
+                            <ProgressBar Width="280" Height="3"
+                                         Value="{Binding ProgressValue, Mode=OneWay}"
+                                         Maximum="{Binding ProgressMaximum, Mode=OneWay}"
+                                         IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}" />
+                            <Button Content="Cancel" Command="{Binding CancelCommand}" Margin="0,16,0,0" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2" Background="{StaticResource HeaderBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
+            <Grid Margin="24,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="{StaticResource AccentMutedBrush}" CornerRadius="6" Padding="9,5" Margin="0,0,14,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding SelectedCount, Mode=OneWay}" Foreground="{StaticResource AccentHoverBrush}" FontWeight="SemiBold" />
+                            <TextBlock Text=" selected" Foreground="{StaticResource AccentHoverBrush}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <Grid Grid.Column="1" Margin="28,0" VerticalAlignment="Center">
+                    <StackPanel>
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource TextBrush}"
+                                   FontSize="11" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding OutputDirectory}" Foreground="{StaticResource MutedTextBrush}"
+                                   FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding BusyText}" Foreground="{StaticResource AccentHoverBrush}"
+                               FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
+
+                <Button Grid.Column="2" Content="Export selected" Style="{StaticResource PrimaryButton}"
+                        Command="{Binding ExportCommand}" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.RowSpan="3" Panel.ZIndex="30"
+              Visibility="{Binding IsSettingsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border Background="#B8000000" />
+            <Border Width="620" HorizontalAlignment="Right" Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1,0,0,0"
+                    shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Grid Margin="30,26">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,25">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Settings" FontSize="23" FontWeight="SemiBold" />
+                            <TextBlock Text="Configure game assets, mappings and export destination."
+                                       Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="Close" Command="{Binding CloseSettingsCommand}" />
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Text="GAME CONTENT" Foreground="{StaticResource MutedTextBrush}" FontSize="10"
+                                       FontWeight="SemiBold" Margin="0,0,0,11" />
+
+                            <TextBlock Text="Squad installation" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <Grid Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Text="{Binding SquadPath, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1" Content="Browse…" Click="BrowseSquad_Click" Margin="8,0,0,0" />
+                            </Grid>
+
+                            <TextBlock Text="Mappings file (.usmap)" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <Grid Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Text="{Binding MappingsPath, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1" Content="Browse…" Click="BrowseMappings_Click" Margin="8,0,0,0" />
+                            </Grid>
+
+                            <TextBlock Text="Export directory" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <Grid Margin="0,0,0,20">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Text="{Binding OutputDirectory, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1" Content="Browse…" Click="BrowseOutput_Click" Margin="8,0,0,0" />
+                            </Grid>
+
+                            <Grid Margin="0,0,0,20">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="96" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,18,0">
+                                    <TextBlock Text="Export parallelism" FontWeight="SemiBold" />
+                                    <TextBlock Text="Layers processed at once. 1 uses the least RAM; 2 is balanced; 3–8 suits high-end CPU and NVMe."
+                                               Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                                               TextWrapping="Wrap" Margin="0,4,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding ParallelismOptions}"
+                                          SelectedItem="{Binding ExportParallelism}"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Border Background="{StaticResource SurfaceRaisedBrush}" BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,22">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Game profile" FontWeight="SemiBold" />
+                                        <TextBlock Text="Squad · EGame.GAME_Squad"
+                                                   Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <Border Grid.Column="1" Background="{StaticResource AccentMutedBrush}" CornerRadius="5"
+                                            Padding="8,4" VerticalAlignment="Center">
+                                        <TextBlock Text="Windows" Foreground="{StaticResource AccentHoverBrush}" FontSize="11" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="WORKSHOP MODS" Foreground="{StaticResource MutedTextBrush}" FontSize="10"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Text="Detected from the Steam Workshop library"
+                                               Foreground="{StaticResource SubtleTextBrush}" FontSize="11" Margin="0,3,0,0" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="Rescan" Command="{Binding RefreshModsCommand}" Padding="11,5" />
+                            </Grid>
+
+                            <TextBox Text="{Binding WorkshopPath, UpdateSourceTrigger=PropertyChanged}" Margin="0,8,0,10"
+                                     ToolTip="Automatically derived from the Steam library containing Squad" />
+
+                            <ItemsControl ItemsSource="{Binding ContentSources}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#12171A" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                                CornerRadius="7" Padding="11" Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <CheckBox IsChecked="{Binding IsEnabled}" Margin="0,1,10,0"
+                                                          Visibility="{Binding IsMod, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Version, Mode=OneWay, StringFormat=Installed: {0}}"
+                                                               Foreground="{StaticResource MutedTextBrush}" FontSize="11" Margin="0,3,0,0" />
+                                                </StackPanel>
+                                                <Border Grid.Column="2" Background="#20272B" CornerRadius="5" Padding="7,3"
+                                                        VerticalAlignment="Top">
+                                                    <TextBlock Text="{Binding CacheStatus}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                                                </Border>
+                                                <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,0,0"
+                                                           Foreground="{StaticResource SubtleTextBrush}" FontSize="11">
+                                                    <Run Text="{Binding CacheSize, Mode=OneWay}" /><Run Text=" · " />
+                                                    <Run Text="{Binding CacheLayers, Mode=OneWay}" /><Run Text=" · cached: " />
+                                                    <Run Text="{Binding CachedVersion, Mode=OneWay}" />
+                                                </TextBlock>
+                                                <StackPanel Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal"
+                                                            HorizontalAlignment="Right" Margin="0,9,0,0">
+                                                    <Button Content="Clear cache" Command="{Binding ClearCacheCommand}" Padding="9,4" />
+                                                    <Button Content="Rebuild" Command="{Binding RebuildCacheCommand}" Padding="9,4"
+                                                            Margin="7,0,0,0" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="No mods were found in this Workshop directory."
+                                       Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0"
+                                       Visibility="{Binding HasNoMods, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <Grid Grid.Row="2" Margin="0,22,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Saving does not scan content. Use Scan content to rebuild the catalog."
+                                   Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"
+                                   TextWrapping="Wrap" Margin="0,0,20,0" />
+                        <Button Grid.Column="1" Content="Save" Style="{StaticResource PrimaryButton}"
+                                Command="{Binding SaveSettingsCommand}" />
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

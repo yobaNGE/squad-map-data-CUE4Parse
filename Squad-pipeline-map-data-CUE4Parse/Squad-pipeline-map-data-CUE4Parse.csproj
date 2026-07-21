@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <RootNamespace>Squad_pipeline_map_data_CUE4Parse</RootNamespace>
+        <AssemblyName>SquadPipeline</AssemblyName>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UseWPF>true</UseWPF>
+        <UseAppHost>true</UseAppHost>
+        <ApplicationIcon>$(MSBuildProjectDirectory)\Assets\squad-pipeline-icon.ico</ApplicationIcon>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Remove="Assets\squad-pipeline-icon.ico"/>
+        <Resource Include="Assets\squad-pipeline-icon.ico"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CUE4Parse\CUE4Parse\CUE4Parse.csproj"/>
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10"/>
+        <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12"/>
+        <InternalsVisibleTo Include="AssetInspector"/>
+    </ItemGroup>
+
+</Project>

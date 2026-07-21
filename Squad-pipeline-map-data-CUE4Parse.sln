@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Squad-pipeline-map-data-CUE4Parse", "Squad-pipeline-map-data-CUE4Parse\Squad-pipeline-map-data-CUE4Parse.csproj", "{EEC0B5E9-66ED-4F7C-9476-DD446F9B55F0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CUE4Parse", "CUE4Parse\CUE4Parse\CUE4Parse.csproj", "{5D1D8D5B-F054-4A63-861F-2BA474A7E13D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AssetInspector", "tools\AssetInspector\AssetInspector.csproj", "{A302D5D7-7D42-4A50-8A99-533581954AE4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EEC0B5E9-66ED-4F7C-9476-DD446F9B55F0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EEC0B5E9-66ED-4F7C-9476-DD446F9B55F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EEC0B5E9-66ED-4F7C-9476-DD446F9B55F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EEC0B5E9-66ED-4F7C-9476-DD446F9B55F0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5D1D8D5B-F054-4A63-861F-2BA474A7E13D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5D1D8D5B-F054-4A63-861F-2BA474A7E13D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5D1D8D5B-F054-4A63-861F-2BA474A7E13D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5D1D8D5B-F054-4A63-861F-2BA474A7E13D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A302D5D7-7D42-4A50-8A99-533581954AE4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A302D5D7-7D42-4A50-8A99-533581954AE4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A302D5D7-7D42-4A50-8A99-533581954AE4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A302D5D7-7D42-4A50-8A99-533581954AE4}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
