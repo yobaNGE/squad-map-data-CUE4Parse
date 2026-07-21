@@ -18,6 +18,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private readonly ProfileStore _profileStore = new();
     private readonly WorkshopModDiscovery _modDiscovery = new();
+    private readonly SdkPluginDiscovery _sdkPluginDiscovery = new();
     private readonly ContentVersionService _versions = new();
     private readonly LayerCacheStore _cache = new();
     private ArchiveProfile _profile = new();
@@ -30,6 +31,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private IReadOnlyDictionary<string, string> _sourceKeys = new Dictionary<string, string>();
     private CancellationTokenSource? _operationCancellation;
     private bool _suppressSelectionNotifications;
+    private ContentLayoutKind _contentLayoutKind = ContentLayoutKind.Cooked;
 
     private string _squadPath = string.Empty;
     private string _mappingsPath = string.Empty;
@@ -105,6 +107,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         get => _workshopPath;
         set => SetProperty(ref _workshopPath, value);
     }
+
+    public bool IsEditorSdk => _contentLayoutKind == ContentLayoutKind.EditorSdk;
+    public bool UsesWorkshop => !IsEditorSdk;
+    public string ContentModeLabel => IsEditorSdk ? "Squad SDK · uncooked assets" : "Squad game · cooked archives";
+    public string MappingsLabel => IsEditorSdk ? "Mappings file (.usmap, optional for SDK)" : "Mappings file (.usmap)";
+    public string AddonSectionTitle => IsEditorSdk ? "SDK MOD PLUGINS" : "WORKSHOP MODS";
+    public string AddonSectionSubtitle => IsEditorSdk
+        ? "Detected from Squad/Plugins/Mods"
+        : "Detected from the Steam Workshop library";
 
     public int ExportParallelism
     {
@@ -208,7 +219,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public bool HasNoLayers => !HasLayers;
     public bool HasMods => ContentSources.Any(source => source.IsMod);
     public bool HasNoMods => !HasMods;
-    public bool HasValidProfile => Directory.Exists(_profile.SquadPath) && File.Exists(_profile.MappingsPath);
+    public bool HasValidProfile => Directory.Exists(_profile.SquadPath)
+                                   && (ContentLayoutDetector.Detect(_profile.SquadPath).IsEditorSdk
+                                       ? string.IsNullOrWhiteSpace(_profile.MappingsPath) || File.Exists(_profile.MappingsPath)
+                                       : File.Exists(_profile.MappingsPath));
 
     public bool? SelectAllVisible
     {
@@ -254,7 +268,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public void SetSquadPath(string path)
     {
         SquadPath = path;
-        WorkshopPath = _modDiscovery.ResolveWorkshopPath(path);
+        UpdateContentLayout();
+        WorkshopPath = UsesWorkshop ? _modDiscovery.ResolveWorkshopPath(path) : string.Empty;
         RefreshModsPreview();
     }
 
@@ -272,11 +287,34 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         MappingsPath = profile.MappingsPath ?? string.Empty;
         OutputDirectory = profile.OutputDirectory;
         ExportParallelism = Math.Clamp(profile.ExportParallelism, 1, 8);
-        WorkshopPath = _modDiscovery.ResolveWorkshopPath(profile.SquadPath, profile.WorkshopPath);
+        UpdateContentLayout();
+        WorkshopPath = UsesWorkshop
+            ? _modDiscovery.ResolveWorkshopPath(profile.SquadPath, profile.WorkshopPath)
+            : string.Empty;
     }
 
     private void RefreshModsPreview()
     {
+        UpdateContentLayout();
+        if (IsEditorSdk)
+        {
+            var enabledPlugins = ContentSources.Where(source => source.SdkPlugin is not null)
+                .ToDictionary(source => source.Id, source => source.IsEnabled, StringComparer.OrdinalIgnoreCase);
+            if (enabledPlugins.Count == 0)
+                enabledPlugins = _profile.SdkPlugins.ToDictionary(
+                    plugin => plugin.Id,
+                    plugin => plugin.Enabled,
+                    StringComparer.OrdinalIgnoreCase);
+
+            var sdkPlugins = _sdkPluginDiscovery.Discover(SquadPath)
+                .Select(plugin => plugin with { Enabled = enabledPlugins.GetValueOrDefault(plugin.Id, true) })
+                .ToArray();
+            RebuildContentSources([], sdkPlugins);
+            OnPropertyChanged(nameof(HasMods));
+            OnPropertyChanged(nameof(HasNoMods));
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(WorkshopPath))
             WorkshopPath = _modDiscovery.ResolveWorkshopPath(SquadPath);
         var enabled = ContentSources.Where(source => source.IsMod)
@@ -287,7 +325,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         var mods = _modDiscovery.Discover(WorkshopPath)
             .Select(mod => mod with { Enabled = enabled.GetValueOrDefault(mod.Id, true) })
             .ToArray();
-        RebuildContentSources(mods);
+        RebuildContentSources(mods, []);
         OnPropertyChanged(nameof(HasMods));
         OnPropertyChanged(nameof(HasNoMods));
     }
@@ -301,7 +339,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ReportError("The Squad installation directory was not found.");
             return Task.CompletedTask;
         }
-        if (!File.Exists(profile.MappingsPath))
+        var mappingsAreRequired = !ContentLayoutDetector.Detect(profile.SquadPath).IsEditorSdk;
+        if ((mappingsAreRequired || !string.IsNullOrWhiteSpace(profile.MappingsPath))
+            && !File.Exists(profile.MappingsPath))
         {
             ReportError("The mappings file was not found.");
             return Task.CompletedTask;
@@ -311,7 +351,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         _profileStore.Save(profile);
         DisposeProvider();
         IsSettingsOpen = false;
-        RebuildContentSources(profile.Mods);
+        RebuildContentSources(profile.Mods, profile.SdkPlugins);
         LoadCachedCatalog(profile);
         return Task.CompletedTask;
     }
@@ -321,7 +361,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private async Task ScanAsync(ArchiveProfile profile)
     {
         _profile = profile;
-        await RunOperationAsync("Mounting Squad and Workshop content…", true, async cancellationToken =>
+        await RunOperationAsync(
+            IsEditorSdk ? "Mounting Squad SDK content…" : "Mounting Squad and Workshop content…",
+            true,
+            async cancellationToken =>
         {
             DisposeProvider();
             PrepareCacheContext(profile);
@@ -407,22 +450,32 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             : OutputDirectory.Trim(),
         WorkshopPath = string.IsNullOrWhiteSpace(WorkshopPath) ? null : WorkshopPath.Trim(),
         ExportParallelism = Math.Clamp(ExportParallelism, 1, 8),
-        Mods = ContentSources.Where(source => source.IsMod).Select(source => source.ToProfile()).ToArray(),
+        Mods = ContentSources.Where(source => source.Mod is not null)
+            .Select(source => source.ToModProfile()).ToArray(),
+        SdkPlugins = ContentSources.Where(source => source.SdkPlugin is not null)
+            .Select(source => source.ToSdkPluginProfile()).ToArray(),
         ModDirectories = [],
         ReadScriptData = false
     };
 
-    private void RebuildContentSources(IReadOnlyList<ModArchiveProfile> mods)
+    private void RebuildContentSources(
+        IReadOnlyList<ModArchiveProfile> mods,
+        IReadOnlyList<SdkPluginProfile> sdkPlugins)
     {
         var vanilla = _versions.ReadVanilla(SquadPath);
         _mappingsSignature = _versions.ReadMappingsSignature(MappingsPath);
-        var sources = new[] { vanilla }.Concat(mods.Select(_versions.FromMod)).ToArray();
+        var sources = new[] { vanilla }
+            .Concat(mods.Select(_versions.FromMod))
+            .Concat(sdkPlugins.Select(_versions.FromSdkPlugin))
+            .ToArray();
         var rows = sources.Select(source =>
         {
             var sourceKey = _cache.BuildSourceKey(source, vanilla, _mappingsSignature);
             var state = _cache.GetState(source, sourceKey);
             var mod = mods.FirstOrDefault(candidate => candidate.Id.Equals(source.Id, StringComparison.OrdinalIgnoreCase));
-            return new ContentSourceSettingsViewModel(source, mod, state, ClearCache, RebuildCacheAsync);
+            var sdkPlugin = sdkPlugins.FirstOrDefault(candidate =>
+                candidate.Id.Equals(source.Id, StringComparison.OrdinalIgnoreCase));
+            return new ContentSourceSettingsViewModel(source, mod, sdkPlugin, state, ClearCache, RebuildCacheAsync);
         });
         Replace(ContentSources, rows);
         OnPropertyChanged(nameof(HasMods));
@@ -436,7 +489,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         _mappingsSignature = _versions.ReadMappingsSignature(profile.MappingsPath);
         var vanilla = _versions.ReadVanilla(profile.SquadPath);
-        var sources = new[] { vanilla }.Concat(profile.Mods.Select(_versions.FromMod)).ToArray();
+        var sources = new[] { vanilla }
+            .Concat(profile.Mods.Select(_versions.FromMod))
+            .Concat(profile.SdkPlugins.Select(_versions.FromSdkPlugin))
+            .ToArray();
         _sourceKeys = sources.ToDictionary(
             source => source.Id,
             source => _cache.BuildSourceKey(source, vanilla, _mappingsSignature),
@@ -664,6 +720,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         target.Clear();
         foreach (var value in values) target.Add(value);
+    }
+
+    private void UpdateContentLayout()
+    {
+        _contentLayoutKind = ContentLayoutDetector.Detect(SquadPath).Kind;
+        OnPropertyChanged(nameof(IsEditorSdk));
+        OnPropertyChanged(nameof(UsesWorkshop));
+        OnPropertyChanged(nameof(ContentModeLabel));
+        OnPropertyChanged(nameof(MappingsLabel));
+        OnPropertyChanged(nameof(AddonSectionTitle));
+        OnPropertyChanged(nameof(AddonSectionSubtitle));
     }
 
     private static void ReplaceOptions(

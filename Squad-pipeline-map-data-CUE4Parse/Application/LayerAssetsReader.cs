@@ -1,6 +1,5 @@
 using System.Globalization;
 using CUE4Parse.UE4.Assets.Exports;
-using CUE4Parse.UE4.Assets.Exports.Actor;
 using CUE4Parse.UE4.Assets.Exports.Engine;
 using Squad_pipeline_map_data_CUE4Parse.Domain;
 using Squad_pipeline_map_data_CUE4Parse.Infrastructure;
@@ -43,7 +42,6 @@ internal sealed class LayerAssetsReader
 
         foreach (var actor in exports)
         {
-            if (actor is not AActor) continue;
             if (!assetKinds.TryGetValue(actor.ExportType, out var kind))
             {
                 kind = Classify(actor);

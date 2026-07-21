@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Text.Json.Nodes;
 using CUE4Parse.UE4.Assets.Exports;
+using CUE4Parse.UE4.Assets.Exports.EdGraph;
 using CUE4Parse.UE4.Assets.Exports.Engine;
 using CUE4Parse.UE4.Assets.Objects;
 using CUE4Parse.UE4.Assets.Objects.Properties;
@@ -79,6 +80,13 @@ internal sealed class AssetGraphInspector(int maxDepth, int maxItems)
             var serializer = Newtonsoft.Json.JsonSerializer.CreateDefault();
             var token = JToken.FromObject(script.ScriptBytecode, serializer);
             node["scriptBytecode"] = JsonNode.Parse(token.ToString(Formatting.None));
+        }
+
+        if (export is UEdGraphNode { Pins.Length: > 0 } graphNode)
+        {
+            var serializer = Newtonsoft.Json.JsonSerializer.CreateDefault();
+            var token = JToken.FromObject(graphNode.Pins, serializer);
+            node["pins"] = JsonNode.Parse(token.ToString(Formatting.None));
         }
 
         if (export.Properties.Count > maxItems)

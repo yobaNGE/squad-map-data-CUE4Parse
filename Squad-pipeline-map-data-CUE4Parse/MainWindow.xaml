@@ -328,7 +328,7 @@
                                 <Button Grid.Column="1" Content="Browse…" Click="BrowseSquad_Click" Margin="8,0,0,0" />
                             </Grid>
 
-                            <TextBlock Text="Mappings file (.usmap)" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <TextBlock Text="{Binding MappingsLabel}" FontWeight="SemiBold" Margin="0,0,0,6" />
                             <Grid Margin="0,0,0,16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -373,7 +373,7 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <TextBlock Text="Game profile" FontWeight="SemiBold" />
-                                        <TextBlock Text="Squad · EGame.GAME_Squad"
+                                        <TextBlock Text="{Binding ContentModeLabel}"
                                                    Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
                                     </StackPanel>
                                     <Border Grid.Column="1" Background="{StaticResource AccentMutedBrush}" CornerRadius="5"
@@ -389,15 +389,16 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="WORKSHOP MODS" Foreground="{StaticResource MutedTextBrush}" FontSize="10"
+                                    <TextBlock Text="{Binding AddonSectionTitle}" Foreground="{StaticResource MutedTextBrush}" FontSize="10"
                                                FontWeight="SemiBold" />
-                                    <TextBlock Text="Detected from the Steam Workshop library"
+                                    <TextBlock Text="{Binding AddonSectionSubtitle}"
                                                Foreground="{StaticResource SubtleTextBrush}" FontSize="11" Margin="0,3,0,0" />
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="Rescan" Command="{Binding RefreshModsCommand}" Padding="11,5" />
                             </Grid>
 
                             <TextBox Text="{Binding WorkshopPath, UpdateSourceTrigger=PropertyChanged}" Margin="0,8,0,10"
+                                     IsEnabled="{Binding UsesWorkshop}"
                                      ToolTip="Automatically derived from the Steam library containing Squad" />
 
                             <ItemsControl ItemsSource="{Binding ContentSources}">

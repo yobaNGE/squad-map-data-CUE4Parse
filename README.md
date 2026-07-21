@@ -1,12 +1,14 @@
 # Squad Pipeline
 
-Windows desktop tool for scanning **Squad** game content and exporting layer data with **CUE4Parse**.
+Windows desktop tool for scanning **Squad** content and exporting layer data to JSON with **CUE4Parse**.
 
-Supports vanilla content and Steam Workshop mods, filtering by map, game mode and source, cached scans, and parallel export.
+Supports the cooked Steam installation, Steam Workshop mods, and uncooked assets from the Squad SDK.
 
 ## Features
 
-- Scans vanilla and enabled Steam Workshop content.
+- Scans vanilla, enabled Steam Workshop content, or the Squad SDK.
+- Automatically detects cooked and uncooked content layouts.
+- Discovers content plugins from `Plugins/Mods` in the SDK.
 - Builds a searchable catalog of layers with map, game mode, version, and source metadata.
 - Caches scan results per content source to avoid parsing unchanged assets on every launch.
 - Allows rebuilding or clearing the cache separately for vanilla content and individual mods.
@@ -30,24 +32,42 @@ Settings
 ## Requirements
 
 - Windows
-- Squad installed through Steam
-- A matching `.usmap` mappings file
+- Squad installed through Steam, or the Squad SDK installed through Epic Games Launcher
+- A matching `.usmap` mappings file for cooked game content
 
-Generate the `.usmap` file with [jmap](https://github.com/trumank/jmap). For example, from a full-memory minidump:
+Generate the `.usmap` file with [jmap](https://github.com/trumank/jmap).
 
-```powershell
-cargo run --release -- --minidump <dump.dmp> mappings.usmap
-```
+Mappings are not required for uncooked SDK assets.
 
 ## Usage
 
 1. Open **Settings**.
-2. Select the Squad installation directory, `.usmap` file, and export directory.
-3. Enable required Workshop mods and save the settings.
-4. Click **Scan content**.
-5. Filter and select layers, then click **Export selected**.
+2. Select the Squad installation or SDK directory and the export directory.
+3. For cooked content, select a matching `.usmap` file.
+4. Enable required Workshop mods or SDK plugins and save the settings.
+5. Click **Scan content**.
+6. Filter and select layers, then click **Export selected**.
 
 After a Squad or mod update, use **Rebuild** to refresh the cached catalog. Use **Clear cache** when cached data must be discarded completely.
+
+### Squad SDK
+
+Select the SDK project root containing `SquadGame.uproject` and `Content`. The default location is usually:
+
+```text
+C:\Program Files\Epic Games\SquadEditor\Squad
+```
+
+The application reads uncooked project and plugin assets directly. SDK data can differ from cooked game exports when one of the installations is older.
+
+## Build
+
+```powershell
+git submodule update --init --recursive
+dotnet build Squad-pipeline-map-data-CUE4Parse.sln
+```
+
+Building requires the .NET 10 SDK on Windows.
 
 ## Limitations
 

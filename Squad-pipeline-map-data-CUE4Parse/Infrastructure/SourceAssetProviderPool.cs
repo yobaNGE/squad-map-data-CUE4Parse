@@ -25,11 +25,16 @@ public sealed class SourceAssetProviderPool(ArchiveProfile profile) : IDisposabl
     private async Task<GameAssetProvider> CreateAsync(string sourceId)
     {
         var isVanilla = sourceId.Equals("vanilla", StringComparison.OrdinalIgnoreCase);
+        var isSdk = profile.ResolveContentLayout().IsEditorSdk;
         var mod = isVanilla
             ? null
             : profile.Mods.FirstOrDefault(candidate =>
                 candidate.Id.Equals(sourceId, StringComparison.OrdinalIgnoreCase));
-        if (!isVanilla && mod is null)
+        var sdkPlugin = isVanilla
+            ? null
+            : profile.SdkPlugins.FirstOrDefault(candidate =>
+                candidate.Id.Equals(sourceId, StringComparison.OrdinalIgnoreCase));
+        if (!isVanilla && mod is null && sdkPlugin is null)
             throw new InvalidOperationException($"Content source '{sourceId}' is not present in the profile.");
 
         IGameAssetProvider? vanillaFallback = null;
@@ -38,7 +43,8 @@ public sealed class SourceAssetProviderPool(ArchiveProfile profile) : IDisposabl
 
         var sourceProfile = profile with
         {
-            Mods = mod is null ? [] : [mod with { Enabled = true }],
+            Mods = !isSdk && mod is not null ? [mod with { Enabled = true }] : [],
+            SdkPlugins = isSdk && sdkPlugin is not null ? [sdkPlugin with { Enabled = true }] : [],
             ModDirectories = []
         };
         var provider = new GameAssetProvider(sourceProfile, vanillaFallback);
