@@ -11,19 +11,18 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
 {
     public CapturePoints Read(LayerReadContext context, string gamemode) => gamemode.ToUpperInvariant() switch
     {
-        "INVASION" => ReadInvasion(context.Exports),
-        "AAS" => ReadAas(context.Exports),
-        "RAAS" => ReadRaas(context.Exports),
-        "SKIRMISH" => ReadSkirmish(context.Exports),
+        "INVASION" => ReadInvasion(context),
+        "AAS" => ReadAas(context),
+        "RAAS" => ReadRaas(context),
+        "SKIRMISH" => ReadSkirmish(context),
         "TC" or "TERRITORYCONTROL" => ReadTerritoryControl(context),
-        "SEED" => ReadSeed(context.Exports),
+        "SEED" => ReadSeed(context),
         _ => CapturePoints.Empty()
     };
 
-    private CapturePoints ReadInvasion(IReadOnlyList<UObject> exports)
+    private CapturePoints ReadInvasion(LayerReadContext context)
     {
-        var initializer = exports.FirstOrDefault(export =>
-            export.ExportType.Equals("SQGraphRAASInitializerComponent", StringComparison.OrdinalIgnoreCase));
+        var initializer = FindExport(context, "SQGraphRAASInitializerComponent");
         var links = ReadLinks(initializer, "DesignOutgoingLinks");
         var pointsOrder = BuildPointsOrder(links);
 
@@ -37,9 +36,9 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         };
     }
 
-    private CapturePoints ReadAas(IReadOnlyList<UObject> exports)
+    private CapturePoints ReadAas(LayerReadContext context)
     {
-        var initializer = FindExport(exports, "SQGraphAASInitializerComponent");
+        var initializer = FindExport(context, "SQGraphAASInitializerComponent");
         var links = ReadLinks(initializer, "DesignOutgoingLinks", GetCapturePointName);
         var pointsOrder = BuildPointsOrder(links);
 
@@ -53,9 +52,9 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         };
     }
 
-    private CapturePoints ReadRaas(IReadOnlyList<UObject> exports)
+    private CapturePoints ReadRaas(LayerReadContext context)
     {
-        var initializer = FindExport(exports, "SQRAASLaneInitializer_C");
+        var initializer = FindExport(context, "SQRAASLaneInitializer_C");
         var allLinks = new List<CaptureLink>();
         var laneNames = new List<string>();
         var lanes = new Dictionary<string, CaptureLane>(StringComparer.OrdinalIgnoreCase);
@@ -84,9 +83,9 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         };
     }
 
-    private CapturePoints ReadSkirmish(IReadOnlyList<UObject> exports)
+    private CapturePoints ReadSkirmish(LayerReadContext context)
     {
-        var initializer = FindExport(exports, "SQGraphAASInitializerComponent");
+        var initializer = FindExport(context, "SQGraphAASInitializerComponent");
         var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var pointNumber = 0;
         var links = ReadLinks(initializer, "DesignOutgoingLinks", GetSkirmishPointName);
@@ -120,18 +119,14 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
 
     private CapturePoints ReadTerritoryControl(LayerReadContext context)
     {
-        var exports = context.Exports;
-        var graph = exports.FirstOrDefault(export =>
-            export.ExportType.Equals("TC_HexGraph_C", StringComparison.OrdinalIgnoreCase));
+        var graph = FindExport(context, "TC_HexGraph_C");
         var transforms = context.Transforms;
-        var mains = exports
-            .Where(export => export.ExportType.Equals("BP_CaptureZoneMain_C", StringComparison.OrdinalIgnoreCase))
+        var mains = context.FindExact("BP_CaptureZoneMain_C")
             .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var mainNames = mains.Select(GetGraphNodeName).ToArray();
         var objectives = mains.Select((main, index) => ReadMainObjective(main, index + 1, transforms)).ToArray();
-        var hexs = exports
-            .Where(export => export.ExportType.Equals("TC_HexZone_C", StringComparison.OrdinalIgnoreCase))
+        var hexs = context.FindExact("TC_HexZone_C")
             .Select(hex => ReadHex(hex, transforms))
             .OrderByDescending(hex => hex.HexNumber)
             .ToArray();
@@ -154,9 +149,9 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         };
     }
 
-    private CapturePoints ReadSeed(IReadOnlyList<UObject> exports)
+    private CapturePoints ReadSeed(LayerReadContext context)
     {
-        var initializer = FindExport(exports, "SQGraphAASInitializerComponent");
+        var initializer = FindExport(context, "SQGraphAASInitializerComponent");
         var links = ReadLinks(initializer, "DesignOutgoingLinks", GetSeedPointName);
         var pointsOrder = BuildPointsOrder(links);
 
@@ -370,8 +365,8 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         return separator < 0 ? flagName : graphName[..(separator + 1)] + flagName;
     }
 
-    private static UObject? FindExport(IReadOnlyList<UObject> exports, string exportType) => exports.FirstOrDefault(
-        export => export.ExportType.Equals(exportType, StringComparison.OrdinalIgnoreCase));
+    private static UObject? FindExport(LayerReadContext context, string exportType) =>
+        context.FindExact(exportType).FirstOrDefault();
 
     private static string GetGraphNodeName(UObject actor)
     {

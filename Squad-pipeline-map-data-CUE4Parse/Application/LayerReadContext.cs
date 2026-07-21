@@ -5,17 +5,24 @@ namespace Squad_pipeline_map_data_CUE4Parse.Application;
 
 internal sealed class LayerReadContext
 {
+    private readonly LevelExportIndex _exports;
+
     public LayerReadContext(UObject world, UnrealPropertyReader properties)
     {
         World = world;
-        Exports = world.Owner?.GetExports().ToArray() ?? [];
-        WorldSettings = Exports.FirstOrDefault(export =>
-            export.ExportType.Equals("SQWorldSettings", StringComparison.OrdinalIgnoreCase));
+        _exports = new LevelExportIndex(world);
+        WorldSettings = _exports.WorldSettings;
         Transforms = new SceneTransformResolver(properties);
     }
 
     public UObject World { get; }
-    public IReadOnlyList<UObject> Exports { get; }
     public UObject? WorldSettings { get; }
     public SceneTransformResolver Transforms { get; }
+
+    public IReadOnlyList<UObject> FindExact(params string[] exportTypes) => _exports.FindExact(exportTypes);
+
+    public IReadOnlyList<UObject> FindActorsDerivedFrom(params string[] typeNames) =>
+        _exports.FindActorsDerivedFrom(typeNames);
+
+    public IReadOnlyList<UObject> OwnedBy(UObject actor) => _exports.OwnedBy(actor);
 }

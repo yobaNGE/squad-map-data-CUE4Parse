@@ -16,15 +16,16 @@ internal sealed class LayerFactionSelectionReader
     public LayerFactionSelections Read(UObject layer)
     {
         var separated = _properties.BoolInherited(layer, false, "bSeparatedFactionsList");
-        var common = ReadFactionList(_properties.MapInherited(layer, "FactionsList"));
+        var common = new Lazy<IReadOnlyList<LayerFactionSelection>>(
+            () => ReadFactionList(_properties.MapInherited(layer, "FactionsList")));
         var hasTeam1List = _properties.Raw(layer, "FactionsListTeamOne") is not null;
         var hasTeam2List = _properties.Raw(layer, "FactionsListTeamTwo") is not null;
         var team1 = hasTeam1List
             ? ReadFactionList(_properties.Map(layer, "FactionsListTeamOne"))
-            : common;
+            : common.Value;
         var team2 = hasTeam2List
             ? ReadFactionList(_properties.Map(layer, "FactionsListTeamTwo"))
-            : separated ? [] : common;
+            : separated ? [] : common.Value;
 
         return new LayerFactionSelections(separated, team1, team2);
     }
