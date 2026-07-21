@@ -10,14 +10,9 @@ internal sealed partial class MapAssetsReader(UnrealPropertyReader properties)
 {
     public MapAssets Read(LayerReadContext context)
     {
-        var exports = context.Exports;
         var transforms = context.Transforms;
-        var zoneActors = exports
-            .Where(export => export.ExportType.Equals("Gameplay_TeamZone_C", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        var groupActors = exports
-            .Where(export => export.ExportType.Equals("SQTeamSpawnGroup", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var zoneActors = context.FindExact("Gameplay_TeamZone_C");
+        var groupActors = context.FindExact("SQTeamSpawnGroup");
         var zoneNames = BuildDisplayNames(zoneActors, adjustSpawnTokens: false);
         var groupNames = BuildDisplayNames(groupActors, adjustSpawnTokens: true);
         var groupsByPath = groupActors.ToDictionary(
@@ -26,11 +21,10 @@ internal sealed partial class MapAssetsReader(UnrealPropertyReader properties)
             StringComparer.OrdinalIgnoreCase);
 
         var protectionZones = zoneActors
-            .Select(actor => ReadProtectionZone(actor, zoneNames[actor.GetPathName()], exports, transforms))
+            .Select(actor => ReadProtectionZone(actor, zoneNames[actor.GetPathName()], context, transforms))
             .ToArray();
         var spawnGroups = groupActors.Select(actor => groupsByPath[actor.GetPathName()]).ToArray();
-        var spawnPoints = exports
-            .Where(export => export.ExportType.Equals("SQTeamSpawnPoint", StringComparison.OrdinalIgnoreCase))
+        var spawnPoints = context.FindExact("SQTeamSpawnPoint")
             .Select(actor => ReadSpawnPoint(actor, groupsByPath, transforms))
             .ToArray();
 
@@ -40,12 +34,12 @@ internal sealed partial class MapAssetsReader(UnrealPropertyReader properties)
     private ProtectionZone ReadProtectionZone(
         UObject actor,
         string displayName,
-        IReadOnlyList<UObject> exports,
+        LayerReadContext context,
         SceneTransformResolver transforms) => new(
         displayName,
         properties.DoubleInherited(actor, 15000, "DeployableLockDistance"),
         properties.IntInherited(actor, 0, "TeamId").ToString(),
-        exports
+        context.OwnedBy(actor)
             .Where(export => IsOwnedBy(export, actor) && IsVolume(export) &&
                              !export.Name.Equals("DummyPresetCollision", StringComparison.OrdinalIgnoreCase))
             .OrderBy(export => export.Name, StringComparer.OrdinalIgnoreCase)

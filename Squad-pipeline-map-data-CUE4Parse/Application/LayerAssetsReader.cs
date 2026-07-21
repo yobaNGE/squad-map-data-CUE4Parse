@@ -33,7 +33,7 @@ internal sealed class LayerAssetsReader
 
     public LayerAssets Read(LayerReadContext context)
     {
-        var exports = context.Exports;
+        var exports = context.FindActorsDerivedFrom(VehicleSpawnerType, DeployableSpawnerType, HelipadType);
         var transforms = context.Transforms;
         var vehicleSpawners = new List<VehicleSpawner>();
         var deployables = new List<Deployable>();

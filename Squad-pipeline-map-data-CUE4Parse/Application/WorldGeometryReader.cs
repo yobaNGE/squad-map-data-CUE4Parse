@@ -31,7 +31,7 @@ internal sealed class WorldGeometryReader(UnrealPropertyReader properties)
 
         var camera = ReadCamera(worldSettings);
         var textureCorners = ReadTextureCorners(worldSettings);
-        var border = ReadBorder(context.Exports);
+        var border = ReadBorder(context.FindExact("SQMapBoundary"));
         return new WorldGeometry(camera, border, FormatMapSize(border, textureCorners), textureCorners);
     }
 

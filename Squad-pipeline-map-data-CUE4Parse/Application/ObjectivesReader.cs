@@ -13,34 +13,31 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         string gamemode,
         CapturePoints capturePoints) => gamemode.ToUpperInvariant() switch
         {
-            "INVASION" => ReadInvasion(context.Exports, capturePoints),
-            "AAS" => ReadAas(context.Exports, capturePoints),
-            "RAAS" => ReadRaas(context.Exports, capturePoints),
-            "SKIRMISH" => ReadSkirmish(context.Exports, capturePoints),
+            "INVASION" => ReadInvasion(context, capturePoints),
+            "AAS" => ReadAas(context, capturePoints),
+            "RAAS" => ReadRaas(context, capturePoints),
+            "SKIRMISH" => ReadSkirmish(context, capturePoints),
             "TC" or "TERRITORYCONTROL" => new Dictionary<string, LayerObjective>(),
-            "SEED" => ReadSeed(context.Exports, capturePoints),
+            "SEED" => ReadSeed(context, capturePoints),
             _ => new Dictionary<string, LayerObjective>()
         };
 
     private IReadOnlyDictionary<string, LayerObjective> ReadInvasion(
-        IReadOnlyList<UObject> exports,
+        LayerReadContext context,
         CapturePoints capturePoints)
     {
         var transforms = new ObjectiveTransformResolver(properties);
-        var clusters = exports
-            .Where(export => export.ExportType.Equals("BP_CaptureZoneCluster_C", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var clusters = context.FindExact("BP_CaptureZoneCluster_C");
         var pointsByCluster = new Dictionary<string, List<ObjectivePoint>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var actor in exports.Where(export =>
-                     export.ExportType.Equals("BP_CaptureZoneInvasion_C", StringComparison.OrdinalIgnoreCase)))
+        foreach (var actor in context.FindExact("BP_CaptureZoneInvasion_C"))
         {
             var cluster = FindParentActor(actor, clusters);
             if (cluster is null) continue;
             var clusterName = GetGraphNodeName(cluster);
             if (!pointsByCluster.TryGetValue(clusterName, out var points))
                 pointsByCluster[clusterName] = points = [];
-            points.Add(ReadPoint(actor, exports, transforms, includeDisplayName: false, includeScaling: false));
+            points.Add(ReadPoint(actor, context, transforms, includeDisplayName: false, includeScaling: false));
         }
 
         var graphOrder = capturePoints.Clusters.PointsOrder ?? [];
@@ -59,12 +56,11 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
                 points);
         }
 
-        foreach (var main in exports
-                     .Where(export => export.ExportType.Equals("BP_CaptureZoneMain_C", StringComparison.OrdinalIgnoreCase))
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
                      .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetGraphNodeName(main);
-            result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), exports, transforms, false);
+            result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), context, transforms, false);
         }
         return result;
     }
@@ -104,7 +100,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
     }
 
     private IReadOnlyDictionary<string, LayerObjective> ReadAas(
-        IReadOnlyList<UObject> exports,
+        LayerReadContext context,
         CapturePoints capturePoints)
     {
         var transforms = new ObjectiveTransformResolver(properties);
@@ -113,35 +109,30 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             .ToDictionary(entry => entry.name, entry => entry.position, StringComparer.OrdinalIgnoreCase);
         var result = new Dictionary<string, LayerObjective>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var actor in exports.Where(export =>
-                     export.ExportType.Equals("BP_CaptureZone_C", StringComparison.OrdinalIgnoreCase)))
+        foreach (var actor in context.FindExact("BP_CaptureZone_C"))
         {
-            var displayName = GetAasDisplayName(actor, exports);
-            result[actor.Name] = ReadCaptureActor(actor, displayName, exports, transforms);
+            var displayName = GetAasDisplayName(actor, context);
+            result[actor.Name] = ReadCaptureActor(actor, displayName, context, transforms);
         }
 
-        foreach (var main in exports
-                     .Where(export => export.ExportType.Equals("BP_CaptureZoneMain_C", StringComparison.OrdinalIgnoreCase))
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetGraphNodeName(main);
-            result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), exports, transforms, false);
+            result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), context, transforms, false);
         }
         return result;
     }
 
     private IReadOnlyDictionary<string, LayerObjective> ReadRaas(
-        IReadOnlyList<UObject> exports,
+        LayerReadContext context,
         CapturePoints capturePoints)
     {
         var transforms = new ObjectiveTransformResolver(properties);
-        var clusters = exports
-            .Where(export => export.ExportType.Equals("BP_CaptureZoneCluster_C", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var clusters = context.FindExact("BP_CaptureZoneCluster_C");
         var pointsByCluster = new Dictionary<string, List<ObjectivePoint>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var actor in exports.Where(export =>
-                     export.ExportType.Equals("BP_CaptureZone_C", StringComparison.OrdinalIgnoreCase)))
+        foreach (var actor in context.FindExact("BP_CaptureZone_C"))
         {
             var cluster = FindParentActor(actor, clusters);
             if (cluster is null) continue;
@@ -150,11 +141,11 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
                 pointsByCluster[clusterName] = points = [];
             points.Add(ReadPoint(
                 actor,
-                exports,
+                context,
                 transforms,
                 includeDisplayName: true,
                 includeScaling: false,
-                GetAasDisplayName(actor, exports)));
+                GetAasDisplayName(actor, context)));
         }
 
         var clusterOrder = new List<string>();
@@ -183,24 +174,22 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
                 points);
         }
 
-        foreach (var main in exports
-                     .Where(export => export.ExportType.Equals("BP_CaptureZoneMain_C", StringComparison.OrdinalIgnoreCase))
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
                      .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetGraphNodeName(main);
-            result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), exports, transforms, false);
+            result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), context, transforms, false);
         }
         return result;
     }
 
     private IReadOnlyDictionary<string, LayerObjective> ReadSkirmish(
-        IReadOnlyList<UObject> exports,
+        LayerReadContext context,
         CapturePoints capturePoints)
     {
         var transforms = new ObjectiveTransformResolver(properties);
-        var actorsByFlagName = exports
-            .Where(export => export.ExportType.Equals("BP_CaptureZone_C", StringComparison.OrdinalIgnoreCase))
-            .GroupBy(actor => ReadFlagName(actor, exports), StringComparer.OrdinalIgnoreCase)
+        var actorsByFlagName = context.FindExact("BP_CaptureZone_C")
+            .GroupBy(actor => ReadFlagName(actor, context), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var objectiveNames = (capturePoints.Points.Links ?? [])
             .SelectMany(link => new[] { link.NodeA, link.NodeB })
@@ -214,7 +203,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             var separator = displayName.IndexOf('-');
             var flagName = separator < 0 ? displayName : displayName[(separator + 1)..];
             if (!actorsByFlagName.TryGetValue(flagName, out var actor)) continue;
-            result[actor.Name] = ReadCaptureActor(actor, displayName, exports, transforms);
+            result[actor.Name] = ReadCaptureActor(actor, displayName, context, transforms);
         }
 
         var mainPositions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
@@ -222,18 +211,17 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             ["00-Team1 Main"] = 1,
             ["Z-Team2 Main"] = (capturePoints.Points.Links?.Count ?? 0) + 1
         };
-        foreach (var main in exports
-                     .Where(export => export.ExportType.Equals("BP_CaptureZoneMain_C", StringComparison.OrdinalIgnoreCase))
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetGraphNodeName(main);
-            result[name] = ReadActor(main, name, "Main", mainPositions[name], exports, transforms, false);
+            result[name] = ReadActor(main, name, "Main", mainPositions[name], context, transforms, false);
         }
         return result;
     }
 
     private IReadOnlyDictionary<string, LayerObjective> ReadSeed(
-        IReadOnlyList<UObject> exports,
+        LayerReadContext context,
         CapturePoints capturePoints)
     {
         var transforms = new ObjectiveTransformResolver(properties);
@@ -242,23 +230,21 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             .ToDictionary(entry => entry.name, entry => entry.position, StringComparer.OrdinalIgnoreCase);
         var result = new Dictionary<string, LayerObjective>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var actor in exports.Where(export =>
-                     export.ExportType.Equals("BP_CaptureZone_C", StringComparison.OrdinalIgnoreCase)))
+        foreach (var actor in context.FindExact("BP_CaptureZone_C"))
         {
             var graphName = GetGraphNodeName(actor);
             var separator = graphName.IndexOf('-');
             var displayName = separator < 0
                 ? TextFormatting.Prettify(graphName)
                 : graphName[..(separator + 1)] + TextFormatting.Prettify(graphName[(separator + 1)..]);
-            result[actor.Name] = ReadCaptureActor(actor, displayName, exports, transforms);
+            result[actor.Name] = ReadCaptureActor(actor, displayName, context, transforms);
         }
 
-        foreach (var main in exports
-                     .Where(export => export.ExportType.Equals("BP_CaptureZoneMain_C", StringComparison.OrdinalIgnoreCase))
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetGraphNodeName(main);
-            result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), exports, transforms, false);
+            result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), context, transforms, false);
         }
         return result;
     }
@@ -266,38 +252,38 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
     private ObjectiveActor ReadCaptureActor(
         UObject actor,
         string displayName,
-        IReadOnlyList<UObject> exports,
+        LayerReadContext context,
         ObjectiveTransformResolver transforms)
     {
         var transform = transforms.ResolveActor(actor);
         return new ObjectiveActor(
-            ReadFlagName(actor, exports),
+            ReadFlagName(actor, context),
             actor.Name,
             displayName,
             transform.Location.X,
             transform.Location.Y,
             transform.Location.Z,
-            ReadVolumes(actor, exports, transforms, false),
+            ReadVolumes(actor, context, transforms, false),
             null);
     }
 
-    private string GetAasDisplayName(UObject actor, IReadOnlyList<UObject> exports)
+    private string GetAasDisplayName(UObject actor, LayerReadContext context)
     {
-        var flagName = ReadFlagName(actor, exports);
+        var flagName = ReadFlagName(actor, context);
         var separator = actor.Name.IndexOf('-');
         return separator < 0 ? flagName : actor.Name[..(separator + 1)] + flagName;
     }
 
     private ObjectivePoint ReadPoint(
         UObject actor,
-        IReadOnlyList<UObject> exports,
+        LayerReadContext context,
         ObjectiveTransformResolver transforms,
         bool includeDisplayName,
         bool includeScaling,
         string? displayName = null)
     {
         var transform = transforms.ResolveActor(actor);
-        var name = ReadFlagName(actor, exports);
+        var name = ReadFlagName(actor, context);
         return new ObjectivePoint(
             name,
             actor.Name,
@@ -305,7 +291,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             transform.Location.X,
             transform.Location.Y,
             transform.Location.Z,
-            ReadVolumes(actor, exports, transforms, includeScaling));
+            ReadVolumes(actor, context, transforms, includeScaling));
     }
 
     private ObjectiveActor ReadActor(
@@ -313,7 +299,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         string displayName,
         string name,
         int? position,
-        IReadOnlyList<UObject> exports,
+        LayerReadContext context,
         ObjectiveTransformResolver transforms,
         bool includeScaling)
     {
@@ -325,16 +311,16 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             transform.Location.X,
             transform.Location.Y,
             transform.Location.Z,
-            ReadVolumes(actor, exports, transforms, includeScaling),
+            ReadVolumes(actor, context, transforms, includeScaling),
             position);
     }
 
     private IReadOnlyList<ObjectiveVolume> ReadVolumes(
         UObject actor,
-        IReadOnlyList<UObject> exports,
+        LayerReadContext context,
         ObjectiveTransformResolver transforms,
-        bool includeScaling) => exports
-        .Where(export => IsOwnedBy(export, actor) && IsVolume(export))
+        bool includeScaling) => context.OwnedBy(actor)
+        .Where(IsVolume)
         .Select(component => ReadVolume(component, transforms, includeScaling))
         .Where(volume => volume is not null)
         .Cast<VolumeWithRadius>()
@@ -451,10 +437,10 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         includeScaling ? transform.Scale.Y : null,
         includeScaling ? transform.Scale.Z : null);
 
-    private string ReadFlagName(UObject actor, IReadOnlyList<UObject> exports)
+    private string ReadFlagName(UObject actor, LayerReadContext context)
     {
         var component = properties.ObjectInherited(actor, "SQCaptureZone", "SQCaptureZoneInvasion")
-                        ?? exports.FirstOrDefault(export => IsOwnedBy(export, actor) &&
+                        ?? context.OwnedBy(actor).FirstOrDefault(export =>
                             export.ExportType.Contains("CaptureZone", StringComparison.OrdinalIgnoreCase));
         return properties.StringInherited(component, actor.Name, "FlagName");
     }
@@ -487,9 +473,6 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         }
         return count == 0 ? 0 : sum / count;
     }
-
-    private static bool IsOwnedBy(UObject export, UObject actor) => export.GetPathName()
-        .StartsWith(actor.GetPathName() + ".", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsVolume(UObject export) => export.ExportType is
         "BoxComponent" or "SphereComponent" or "CapsuleComponent";

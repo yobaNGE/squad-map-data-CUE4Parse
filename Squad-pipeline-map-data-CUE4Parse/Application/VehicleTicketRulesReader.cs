@@ -26,14 +26,11 @@ internal sealed class VehicleTicketRulesReader
     public VehicleTicketRules Read(LayerReadContext context) => _worlds.GetOrAdd(
         context.World.GetPathName(),
         _ => new Lazy<VehicleTicketRules>(
-            () => ReadWorld(context.Exports),
+            () => ReadWorld(context.WorldSettings),
             LazyThreadSafetyMode.ExecutionAndPublication)).Value;
 
-    private VehicleTicketRules ReadWorld(IReadOnlyList<UObject> exports)
+    private VehicleTicketRules ReadWorld(UObject? worldSettings)
     {
-        var worldSettings = exports.FirstOrDefault(export =>
-            _properties.RawInherited(export, "DefaultGameMode") is not null
-            || _properties.RawInherited(export, "MapRulesets") is not null);
         if (worldSettings is null) return VehicleTicketRules.Empty;
 
         var ruleSets = new List<UObject>();
