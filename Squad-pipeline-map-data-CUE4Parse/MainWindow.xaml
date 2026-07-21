@@ -233,13 +233,23 @@
 
                     <Border Grid.RowSpan="2" Panel.ZIndex="10" Background="#D9121619"
                             Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">
-                            <ProgressBar Width="280" Height="3"
+                        <Grid HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="80,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="{Binding BusyText}" FontSize="15" FontWeight="SemiBold"
+                                       HorizontalAlignment="Stretch" TextAlignment="Center"
+                                       TextWrapping="Wrap" />
+                            <ProgressBar Grid.Row="1" Margin="0,14,0,0" MaxWidth="560"
+                                         HorizontalAlignment="Stretch" Height="3"
                                          Value="{Binding ProgressValue, Mode=OneWay}"
                                          Maximum="{Binding ProgressMaximum, Mode=OneWay}"
                                          IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}" />
-                            <Button Content="Cancel" Command="{Binding CancelCommand}" Margin="0,16,0,0" />
-                        </StackPanel>
+                            <Button Grid.Row="2" Content="Cancel" Command="{Binding CancelCommand}"
+                                    HorizontalAlignment="Center" Margin="0,16,0,0" />
+                        </Grid>
                     </Border>
                 </Grid>
             </Border>
@@ -265,34 +275,11 @@
 
                 <Grid Grid.Column="1" Margin="28,0" VerticalAlignment="Center">
                     <StackPanel>
-                        <StackPanel.Style>
-                            <Style TargetType="StackPanel">
-                                <Setter Property="Visibility" Value="Visible" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </StackPanel.Style>
                         <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource TextBrush}"
                                    FontSize="11" TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{Binding OutputDirectory}" Foreground="{StaticResource MutedTextBrush}"
                                    FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
                     </StackPanel>
-                    <TextBlock Text="{Binding BusyText}" Foreground="{StaticResource AccentHoverBrush}"
-                               FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
                 </Grid>
 
                 <Button Grid.Column="2" Content="Export selected" Style="{StaticResource PrimaryButton}"

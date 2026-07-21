@@ -12,6 +12,7 @@ public sealed record LayerExportProgress(
     int Total,
     string LayerName,
     int Failed,
+    int Cached,
     long WorkingSetBytes,
     long PeakWorkingSetBytes);
 
@@ -20,6 +21,8 @@ public sealed record LayerExportFailure(string LayerName, string SourceId, strin
 public sealed record LayerExportReport(
     int Exported,
     int Failed,
+    int Cached,
+    TimeSpan Elapsed,
     long PeakWorkingSetBytes,
     IReadOnlyList<LayerExportFailure> Failures);
 
@@ -51,6 +54,8 @@ public sealed class LayerExporter
         var failures = new ConcurrentQueue<LayerExportFailure>();
         var completed = 0;
         var exported = 0;
+        var cachedCount = 0;
+        var stopwatch = Stopwatch.StartNew();
         var peakWorkingSet = Process.GetCurrentProcess().WorkingSet64;
         var items = layers.Select(layer => new ExportItem(layer, AllocateOutputPath(layer))).ToArray();
 
@@ -74,6 +79,7 @@ public sealed class LayerExporter
                             cached.TryGetArtifact(layer, out var artifactPath))
                         {
                             await CopyAsync(artifactPath!, item.OutputPath, token);
+                            Interlocked.Increment(ref cachedCount);
                         }
                         else
                         {
@@ -107,6 +113,7 @@ public sealed class LayerExporter
                         layers.Count,
                         layer.Name,
                         failures.Count,
+                        Volatile.Read(ref cachedCount),
                         workingSet,
                         Interlocked.Read(ref peakWorkingSet)));
                 });
@@ -117,7 +124,13 @@ public sealed class LayerExporter
             }
         }
 
-        return new LayerExportReport(exported, failures.Count, peakWorkingSet, failures.ToArray());
+        return new LayerExportReport(
+            exported,
+            failures.Count,
+            cachedCount,
+            stopwatch.Elapsed,
+            peakWorkingSet,
+            failures.ToArray());
 
         string AllocateOutputPath(LayerDescriptor layer)
         {

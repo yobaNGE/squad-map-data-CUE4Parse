@@ -54,12 +54,17 @@ public sealed class SourceAssetProviderPool(ArchiveProfile profile) : IDisposabl
         }
     }
 
-    public void Release(string sourceId)
+    public async ValueTask ReleaseAsync(string sourceId)
     {
-        if (!_providers.TryRemove(sourceId, out var provider) ||
-            !provider.IsValueCreated ||
-            !provider.Value.IsCompletedSuccessfully) return;
-        provider.Value.Result.Dispose();
+        if (!_providers.TryRemove(sourceId, out var provider) || !provider.IsValueCreated) return;
+        try
+        {
+            (await provider.Value).Dispose();
+        }
+        catch
+        {
+            // Provider creation already reports its own failure to the caller.
+        }
     }
 
     public void Dispose()

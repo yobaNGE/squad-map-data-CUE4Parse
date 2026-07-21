@@ -343,7 +343,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 }
                 finally
                 {
-                    ReleaseExportSource(source.Id);
+                    await ReleaseSourceAsync(source.Id);
                 }
             }
 
@@ -369,6 +369,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 BusyText = $"Exporting {state.Completed} of {state.Total}: {state.LayerName} · " +
                            $"{FormatBytes(state.WorkingSetBytes)} RAM" +
+                           (state.Cached == 0 ? string.Empty : $" · {state.Cached} cached") +
                            (state.Failed == 0 ? string.Empty : $" · {state.Failed} failed");
                 ProgressValue = state.Completed;
             });
@@ -376,11 +377,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 selected,
                 _profile.OutputDirectory,
                 progress,
-                sourceId =>
-                {
-                    ReleaseExportSource(sourceId);
-                    return ValueTask.CompletedTask;
-                },
+                ReleaseSourceAsync,
                 cancellationToken);
 
             if (report.Failures.Count > 0)
@@ -394,8 +391,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             StatusMessage = $"Exported {report.Exported} layers" +
+                            (report.Cached == 0 ? string.Empty : $" · {report.Cached} cached") +
                             (report.Failed == 0 ? string.Empty : $" · {report.Failed} failed") +
-                            $" · peak {FormatBytes(report.PeakWorkingSetBytes)} · {_profile.OutputDirectory}";
+                            $" · {report.Elapsed.ToString(@"mm\:ss")} · peak {FormatBytes(report.PeakWorkingSetBytes)}";
             UpdateCacheStates();
         });
     }
@@ -484,13 +482,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private SourceAssetProviderPool EnsureProviderPool() =>
         _providerPool ??= new SourceAssetProviderPool(_profile);
 
-    private void ReleaseExportSource(string sourceId)
+    private async ValueTask ReleaseSourceAsync(string sourceId)
     {
         _rawMetadataReaders.TryRemove(sourceId, out _);
-        _providerPool?.Release(sourceId);
+        if (_providerPool is not null) await _providerPool.ReleaseAsync(sourceId);
         if (sourceId.Equals("vanilla", StringComparison.OrdinalIgnoreCase)) return;
         _rawMetadataReaders.TryRemove("vanilla", out _);
-        _providerPool?.Release("vanilla");
+        if (_providerPool is not null) await _providerPool.ReleaseAsync("vanilla");
     }
 
     private static string FormatBytes(long bytes)
