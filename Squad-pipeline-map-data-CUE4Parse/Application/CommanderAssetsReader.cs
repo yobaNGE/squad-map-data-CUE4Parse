@@ -60,6 +60,13 @@ internal sealed class CommanderAssetsReader
             if (added.Add($"setting:{available.SettingPath}"))
                 result.Add(available.Fallback);
         }
+
+        foreach (var command in teamActions)
+        {
+            if (result.Count >= teamActions.Count) break;
+            if (added.Add($"command:{command.CommandDataPath}"))
+                result.Add(command.Asset);
+        }
         return result;
     }
 
