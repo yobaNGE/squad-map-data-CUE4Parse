@@ -423,3 +423,8 @@ export-errors.log
 **/CMakeFiles/
 **/CMakeCache.txt
 **/compile_commands.json
+
+
+/examples
+AGENTS.md
+*-plan.md
