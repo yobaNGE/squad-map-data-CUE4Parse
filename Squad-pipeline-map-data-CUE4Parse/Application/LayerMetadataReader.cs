@@ -16,7 +16,7 @@ public sealed partial class LayerMetadataReader(IGameAssetProvider assets) : ILa
 {
     private readonly UnrealPropertyReader _properties = new(assets);
     private readonly LevelDisplayNameIndex _levelNames = new(assets);
-    private readonly WorldGeometryReader _worldGeometry = new(new UnrealPropertyReader(assets));
+    private readonly WorldGeometryReader _worldGeometry = new(assets);
     private readonly LayerAssetsReader _layerAssets = new(assets);
     private readonly CapturePointsReader _capturePoints = new(new UnrealPropertyReader(assets));
     private readonly ObjectivesReader _objectives = new(new UnrealPropertyReader(assets));
@@ -54,7 +54,8 @@ public sealed partial class LayerMetadataReader(IGameAssetProvider assets) : ILa
         var world = ReadFirstWorld(layer);
         var context = new LayerReadContext(world, _properties);
         var seaLevel = ReadSeaLevel(context);
-        var geometry = _worldGeometry.Read(context);
+        var worldPackagePath = assets.ResolvePackagePath(descriptor.WorldObjectPath) ?? string.Empty;
+        var geometry = _worldGeometry.Read(context, worldPackagePath);
         var layerAssets = _layerAssets.Read(context);
         var capturePoints = _capturePoints.Read(context, gamemode);
         var objectives = _objectives.Read(context, gamemode, capturePoints);

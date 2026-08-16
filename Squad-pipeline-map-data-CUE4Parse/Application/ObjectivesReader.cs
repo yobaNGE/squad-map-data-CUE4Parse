@@ -11,14 +11,14 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
     public IReadOnlyDictionary<string, LayerObjective> Read(
         LayerReadContext context,
         string gamemode,
-        CapturePoints capturePoints) => gamemode.ToUpperInvariant() switch
+        CapturePoints capturePoints) => ObjectiveLayoutResolver.Resolve(context, gamemode) switch
         {
-            "INVASION" => ReadInvasion(context, capturePoints),
-            "AAS" => ReadAas(context, capturePoints),
-            "RAAS" => ReadRaas(context, capturePoints),
-            "SKIRMISH" => ReadSkirmish(context, capturePoints),
-            "TC" or "TERRITORYCONTROL" => new Dictionary<string, LayerObjective>(),
-            "SEED" => ReadSeed(context, capturePoints),
+            ObjectiveLayout.Invasion => ReadInvasion(context, capturePoints),
+            ObjectiveLayout.Aas => ReadAas(context, capturePoints),
+            ObjectiveLayout.Raas => ReadRaas(context, capturePoints),
+            ObjectiveLayout.Skirmish => ReadSkirmish(context, capturePoints),
+            ObjectiveLayout.TerritoryControl => new Dictionary<string, LayerObjective>(),
+            ObjectiveLayout.Seed => ReadSeed(context, capturePoints),
             _ => new Dictionary<string, LayerObjective>()
         };
 

@@ -339,8 +339,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ReportError("The Squad installation directory was not found.");
             return Task.CompletedTask;
         }
-        var mappingsAreRequired = !ContentLayoutDetector.Detect(profile.SquadPath).IsEditorSdk;
-        if ((mappingsAreRequired || !string.IsNullOrWhiteSpace(profile.MappingsPath))
+        if (!string.IsNullOrWhiteSpace(profile.MappingsPath)
             && !File.Exists(profile.MappingsPath))
         {
             ReportError("The mappings file was not found.");

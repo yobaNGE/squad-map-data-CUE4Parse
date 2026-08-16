@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using CUE4Parse.UE4.Assets.Exports;
@@ -13,8 +14,12 @@ internal sealed record WorldGeometry(
     string MapSize,
     IReadOnlyList<MapTextureCorner> TextureCorners);
 
-internal sealed class WorldGeometryReader(UnrealPropertyReader properties)
+internal sealed class WorldGeometryReader(IGameAssetProvider assets)
 {
+    private readonly UnrealPropertyReader _properties = new(assets);
+    private readonly ConcurrentDictionary<string, Lazy<IReadOnlyList<BorderPoint>>> _sharedBorders =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private static readonly IReadOnlyDictionary<string, int> CornerIndexes =
         new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
@@ -24,7 +29,7 @@ internal sealed class WorldGeometryReader(UnrealPropertyReader properties)
             ["Three"] = 3
         };
 
-    public WorldGeometry Read(LayerReadContext context)
+    public WorldGeometry Read(LayerReadContext context, string worldPackagePath)
     {
         var worldSettings = context.WorldSettings
                             ?? throw new InvalidDataException($"World '{context.World.Name}' does not contain SQWorldSettings.");
@@ -32,17 +37,18 @@ internal sealed class WorldGeometryReader(UnrealPropertyReader properties)
         var camera = ReadCamera(worldSettings);
         var textureCorners = ReadTextureCorners(worldSettings);
         var border = ReadBorder(context.FindExact("SQMapBoundary"));
+        if (border.Count == 0) border = ReadSharedBorder(worldPackagePath);
         return new WorldGeometry(camera, border, FormatMapSize(border, textureCorners), textureCorners);
     }
 
     private MapCameraActor ReadCamera(IPropertyHolder worldSettings)
     {
-        var actor = properties.Object(worldSettings, "MapCameraLocation")
+        var actor = _properties.Object(worldSettings, "MapCameraLocation")
                     ?? throw new InvalidDataException("SQWorldSettings does not reference MapCameraLocation.");
-        var component = properties.Object(actor, "SceneComponent", "RootComponent")
+        var component = _properties.Object(actor, "SceneComponent", "RootComponent")
                         ?? throw new InvalidDataException($"Map camera actor '{actor.Name}' does not have a scene component.");
-        var location = properties.Vector(component, "RelativeLocation");
-        var rotation = properties.Rotation(component, "RelativeRotation");
+        var location = _properties.Vector(component, "RelativeLocation");
+        var rotation = _properties.Rotation(component, "RelativeRotation");
 
         return new MapCameraActor(
             actor.Name,
@@ -62,12 +68,12 @@ internal sealed class WorldGeometryReader(UnrealPropertyReader properties)
             var propertyName = property.Name.Text;
             if (!propertyName.StartsWith("MapTextureCorner", StringComparison.OrdinalIgnoreCase)) continue;
 
-            var actor = properties.ResolveObject(property.Tag?.GenericValue);
-            var component = properties.Object(actor, "RootComponent", "SceneComponent");
+            var actor = _properties.ResolveObject(property.Tag?.GenericValue);
+            var component = _properties.Object(actor, "RootComponent", "SceneComponent");
             if (actor is null || component is null) continue;
 
             var index = ResolveCornerIndex(propertyName, actor.Name);
-            var location = properties.Vector(component, "RelativeLocation");
+            var location = _properties.Vector(component, "RelativeLocation");
             corners[index] = new MapTextureCorner(index, location.X, location.Y, location.Z);
         }
         return corners.Values.ToArray();
@@ -77,18 +83,38 @@ internal sealed class WorldGeometryReader(UnrealPropertyReader properties)
     {
         var boundary = exports.FirstOrDefault(export =>
             export.ExportType.Equals("SQMapBoundary", StringComparison.OrdinalIgnoreCase));
-        var spline = properties.Object(boundary, "XYBoundary", "RootComponent");
-        var curves = properties.Struct(spline, "SplineCurves");
-        var position = properties.Struct(curves, "Position");
-        var relativeLocation = properties.Vector(spline, "RelativeLocation");
+        var spline = _properties.Object(boundary, "XYBoundary", "RootComponent");
+        var curves = _properties.Struct(spline, "SplineCurves");
+        var position = _properties.Struct(curves, "Position");
+        var relativeLocation = _properties.Vector(spline, "RelativeLocation");
 
         var border = new List<BorderPoint>();
-        foreach (var point in properties.Array(position, "Points").OfType<IPropertyHolder>())
+        foreach (var point in _properties.Array(position, "Points").OfType<IPropertyHolder>())
         {
-            var location = relativeLocation + properties.Vector(point, "OutVal");
+            var location = relativeLocation + _properties.Vector(point, "OutVal");
             border.Add(new BorderPoint(border.Count, location.X, location.Y, location.Z));
         }
         return border;
+    }
+
+    private IReadOnlyList<BorderPoint> ReadSharedBorder(string worldPackagePath)
+    {
+        const string gameplayLayers = "/Gameplay_Layers/";
+        var mapPathEnd = worldPackagePath.IndexOf(gameplayLayers, StringComparison.OrdinalIgnoreCase);
+        if (mapPathEnd < 0) return [];
+
+        var mapPath = worldPackagePath[..mapPathEnd];
+        return _sharedBorders.GetOrAdd(mapPath, path => new Lazy<IReadOnlyList<BorderPoint>>(() =>
+        {
+            var boundaries = assets.PackagePaths
+                .Where(package => package.StartsWith($"{path}/Coop/Layers/", StringComparison.OrdinalIgnoreCase))
+                .Where(package => package.EndsWith(".umap", StringComparison.OrdinalIgnoreCase))
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .SelectMany(package => assets.LoadPackageExports(package))
+                .Where(export => export.ExportType.Equals("SQMapBoundary", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            return boundaries.Length == 1 ? ReadBorder(boundaries) : [];
+        }, LazyThreadSafetyMode.ExecutionAndPublication)).Value;
     }
 
     private static int ResolveCornerIndex(string propertyName, string actorName)
