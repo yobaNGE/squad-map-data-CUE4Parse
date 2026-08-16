@@ -41,7 +41,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         }
 
         var graphOrder = capturePoints.Clusters.PointsOrder ?? [];
-        var positions = BuildReverseGraphPositions(capturePoints.Clusters.Links ?? []);
+        var positions = BuildGraphPositions(capturePoints.Clusters.Links ?? []);
         var result = new Dictionary<string, LayerObjective>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var clusterName in graphOrder
@@ -65,34 +65,34 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         return result;
     }
 
-    private static IReadOnlyDictionary<string, int> BuildReverseGraphPositions(IReadOnlyList<CaptureLink> links)
+    private static IReadOnlyDictionary<string, int> BuildGraphPositions(IReadOnlyList<CaptureLink> links)
     {
-        var predecessors = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        var nodesWithOutgoingLinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var successors = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var nodesWithIncomingLinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var link in links)
         {
-            nodesWithOutgoingLinks.Add(link.NodeA);
-            predecessors.TryAdd(link.NodeA, []);
-            if (!predecessors.TryGetValue(link.NodeB, out var incoming))
-                predecessors[link.NodeB] = incoming = [];
-            incoming.Add(link.NodeA);
+            nodesWithIncomingLinks.Add(link.NodeB);
+            successors.TryAdd(link.NodeB, []);
+            if (!successors.TryGetValue(link.NodeA, out var outgoing))
+                successors[link.NodeA] = outgoing = [];
+            outgoing.Add(link.NodeB);
         }
 
         var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var queue = new Queue<string>();
-        foreach (var terminal in predecessors.Keys.Where(node => !nodesWithOutgoingLinks.Contains(node)))
+        foreach (var source in successors.Keys.Where(node => !nodesWithIncomingLinks.Contains(node)))
         {
-            positions[terminal] = 1;
-            queue.Enqueue(terminal);
+            positions[source] = 1;
+            queue.Enqueue(source);
         }
 
         while (queue.TryDequeue(out var node))
         {
-            foreach (var predecessor in predecessors[node])
+            foreach (var successor in successors[node])
             {
-                if (!positions.TryAdd(predecessor, positions[node] + 1)) continue;
-                queue.Enqueue(predecessor);
+                if (!positions.TryAdd(successor, positions[node] + 1)) continue;
+                queue.Enqueue(successor);
             }
         }
 
