@@ -17,8 +17,9 @@ internal static class ObjectiveLayoutResolver
     {
         if (context.FindExact("TC_HexGraph_C").Count != 0) return ObjectiveLayout.TerritoryControl;
         if (context.FindExact("SQRAASLaneInitializer_C").Count != 0) return ObjectiveLayout.Raas;
-        if (context.FindExact("SQGraphRAASInitializerComponent").Count != 0
-            && context.FindExact("BP_CaptureZoneInvasion_C").Count != 0)
+        if (context.FindExact("BP_CaptureZoneInvasion_C").Count != 0
+            && (context.FindExact("SQGraphRAASInitializerComponent").Count != 0
+                || context.FindExact("SQGraphAASInitializerComponent").Count != 0))
             return ObjectiveLayout.Invasion;
 
         return gamemode.ToUpperInvariant() switch
@@ -28,7 +29,6 @@ internal static class ObjectiveLayoutResolver
             "SKIRMISH" => ObjectiveLayout.Skirmish,
             "TC" or "TERRITORYCONTROL" => ObjectiveLayout.TerritoryControl,
             "SEED" => ObjectiveLayout.Seed,
-            "INVASION" => ObjectiveLayout.Invasion,
             _ => ObjectiveLayout.Unknown
         };
     }
