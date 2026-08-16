@@ -9,14 +9,14 @@ namespace Squad_pipeline_map_data_CUE4Parse.Application;
 
 internal sealed class CapturePointsReader(UnrealPropertyReader properties)
 {
-    public CapturePoints Read(LayerReadContext context, string gamemode) => gamemode.ToUpperInvariant() switch
+    public CapturePoints Read(LayerReadContext context, string gamemode) => ObjectiveLayoutResolver.Resolve(context, gamemode) switch
     {
-        "INVASION" => ReadInvasion(context),
-        "AAS" => ReadAas(context),
-        "RAAS" => ReadRaas(context),
-        "SKIRMISH" => ReadSkirmish(context),
-        "TC" or "TERRITORYCONTROL" => ReadTerritoryControl(context),
-        "SEED" => ReadSeed(context),
+        ObjectiveLayout.Invasion => ReadInvasion(context),
+        ObjectiveLayout.Aas => ReadAas(context),
+        ObjectiveLayout.Raas => ReadRaas(context),
+        ObjectiveLayout.Skirmish => ReadSkirmish(context),
+        ObjectiveLayout.TerritoryControl => ReadTerritoryControl(context),
+        ObjectiveLayout.Seed => ReadSeed(context),
         _ => CapturePoints.Empty()
     };
 
