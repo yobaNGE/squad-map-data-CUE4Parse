@@ -22,11 +22,12 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
 
     private CapturePoints ReadInvasion(LayerReadContext context)
     {
-        var initializer = FindExport(context, "SQGraphRAASInitializerComponent");
+        var initializer = context.FindExact("SQGraphRAASInitializerComponent").FirstOrDefault()
+                          ?? FindExport(context, "SQGraphAASInitializerComponent");
         var links = ReadLinks(initializer, "DesignOutgoingLinks");
         var pointsOrder = BuildPointsOrder(links);
 
-        return CapturePoints.Empty() with
+        return CapturePoints.Empty("Invasion Graph") with
         {
             Clusters = new CaptureClusterGraph(
                 links,

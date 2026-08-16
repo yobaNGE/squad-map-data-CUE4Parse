@@ -130,13 +130,17 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
     {
         var transforms = new ObjectiveTransformResolver(properties);
         var clusters = context.FindExact("BP_CaptureZoneCluster_C");
+        var graphNodes = (capturePoints.Lanes.LaneObjects?.Values ?? [])
+            .SelectMany(lane => lane.PointsOrder)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var pointsByCluster = new Dictionary<string, List<ObjectivePoint>>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var actor in context.FindExact("BP_CaptureZone_C"))
         {
             var cluster = FindParentActor(actor, clusters);
-            if (cluster is null) continue;
-            var clusterName = GetGraphNodeName(cluster);
+            var clusterName = cluster is not null && graphNodes.Contains(GetGraphNodeName(cluster))
+                ? GetGraphNodeName(cluster)
+                : GetGraphNodeName(actor);
             if (!pointsByCluster.TryGetValue(clusterName, out var points))
                 pointsByCluster[clusterName] = points = [];
             points.Add(ReadPoint(
