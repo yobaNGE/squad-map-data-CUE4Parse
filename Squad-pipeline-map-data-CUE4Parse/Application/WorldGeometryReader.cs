@@ -119,15 +119,16 @@ internal sealed class WorldGeometryReader(IGameAssetProvider assets)
 
     private static int ResolveCornerIndex(string propertyName, string actorName)
     {
+        foreach (var (suffix, index) in CornerIndexes)
+        {
+            if (propertyName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return index;
+        }
+
         var firstDigit = actorName.Length;
         while (firstDigit > 0 && char.IsDigit(actorName[firstDigit - 1])) firstDigit--;
         if (firstDigit < actorName.Length)
             return int.Parse(actorName.AsSpan(firstDigit), CultureInfo.InvariantCulture);
 
-        foreach (var (suffix, index) in CornerIndexes)
-        {
-            if (propertyName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return index;
-        }
         throw new InvalidDataException($"Cannot determine the index of '{propertyName}'.");
     }
 
