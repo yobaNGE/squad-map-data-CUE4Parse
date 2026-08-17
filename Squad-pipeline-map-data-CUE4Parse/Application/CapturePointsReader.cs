@@ -56,6 +56,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
     private CapturePoints ReadRaas(LayerReadContext context)
     {
         var initializer = FindExport(context, "SQRAASLaneInitializer_C");
+        var clusters = context.FindExact("BP_CaptureZoneCluster_C");
         var allLinks = new List<CaptureLink>();
         var laneNames = new List<string>();
         var lanes = new Dictionary<string, CaptureLane>(StringComparer.OrdinalIgnoreCase);
@@ -66,7 +67,9 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
             var laneName = UnrealPropertyReader.ToStringValue(properties.RawStartingWith(lane, "LaneName_"));
             if (string.IsNullOrWhiteSpace(laneName)) continue;
 
-            var laneLinks = ReadLinks(properties.ArrayStartingWith(lane, "AASLaneLinks_"), GetGraphNodeName);
+            var laneLinks = ReadLinks(
+                properties.ArrayStartingWith(lane, "AASLaneLinks_"),
+                actor => GetRaasNodeName(actor, clusters));
             var pointsOrder = BuildPointsOrder(laneLinks);
             laneNames.Add(laneName);
             allLinks.AddRange(laneLinks);
@@ -368,6 +371,21 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
 
     private static UObject? FindExport(LayerReadContext context, string exportType) =>
         context.FindExact(exportType).FirstOrDefault();
+
+    private string GetRaasNodeName(UObject actor, IReadOnlyList<UObject> clusters)
+    {
+        if (!actor.ExportType.Equals("BP_CaptureZone_C", StringComparison.OrdinalIgnoreCase))
+            return GetGraphNodeName(actor);
+
+        var root = properties.ObjectInherited(actor, "RootComponent", "DefaultSceneRoot");
+        var parent = properties.Object(root, "AttachParent");
+        if (parent is null) return GetGraphNodeName(actor);
+
+        var parentPath = parent.GetPathName();
+        var cluster = clusters.FirstOrDefault(candidate =>
+            parentPath.StartsWith(candidate.GetPathName() + ".", StringComparison.OrdinalIgnoreCase));
+        return cluster is null ? GetGraphNodeName(actor) : GetGraphNodeName(cluster);
+    }
 
     private static string GetGraphNodeName(UObject actor)
     {
