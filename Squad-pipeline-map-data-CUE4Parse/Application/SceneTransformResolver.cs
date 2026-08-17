@@ -22,6 +22,12 @@ internal sealed class SceneTransformResolver(UnrealPropertyReader properties)
     public SceneTransform ResolveComponent(UObject? component) =>
         ResolveComponent(component, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
+    public Vec3 TransformPosition(SceneTransform transform, Vec3 position)
+    {
+        var value = ToUnrealTransform(transform).TransformPosition(new FVector(position.X, position.Y, position.Z));
+        return new Vec3(value.X, value.Y, value.Z);
+    }
+
     private SceneTransform ResolveComponent(UObject? component, ISet<string> resolving)
     {
         if (component is null) return SceneTransform.Identity;

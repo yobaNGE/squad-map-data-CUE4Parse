@@ -1,3 +1,4 @@
+using System.IO;
 using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Assets.Exports.Actor;
 using CUE4Parse.UE4.Assets.Exports.StaticMesh;
@@ -17,6 +18,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         ObjectiveLayout.Skirmish => ReadSkirmish(context),
         ObjectiveLayout.TerritoryControl => ReadTerritoryControl(context),
         ObjectiveLayout.Seed => ReadSeed(context),
+        ObjectiveLayout.Destruction => ReadDestruction(context),
         _ => CapturePoints.Empty()
     };
 
@@ -167,6 +169,141 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
                 FindMains(pointsOrder),
                 links)
         };
+    }
+
+    private CapturePoints ReadDestruction(LayerReadContext context)
+    {
+        var transforms = context.Transforms;
+        var mains = context.FindExact("BP_CaptureZoneMain_C")
+            .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var mainNames = mains.Select(GetGraphNodeName).ToArray();
+        var director = FindExport(context, "BP_DestructionPhaseDirector_C")
+                       ?? throw new InvalidDataException("Destruction layer does not contain a phase director.");
+
+        return CapturePoints.Empty("Destruction") with
+        {
+            Points = new CapturePointGraph(
+                mainNames,
+                mainNames.Length,
+                Objectives: mains.Select((main, index) => ReadMainObjective(main, index + 1, transforms)).ToArray()),
+            ObjectiveSpawnLocations = context.FindExact("BP_ObjectiveSpawnLocation_C")
+                .Select(actor => ReadObjectiveSpawnLocation(actor, transforms))
+                .ToArray(),
+            DestructionObject = ReadDestructionObject(director, context, transforms)
+        };
+    }
+
+    private CaptureDestructionObject ReadDestructionObject(
+        UObject director,
+        LayerReadContext context,
+        SceneTransformResolver transforms) => new(
+        ReadTeam(properties.StringInherited(director, string.Empty, "AttackingTeam")),
+        properties.IntInherited(director, 0, "DelayBetweenPhases"),
+        properties.ObjectInherited(director, "Objective class")?.Name,
+        properties.IntInherited(director, 0, "RoundTimerIncrease"),
+        properties.BoolInherited(director, false, "TimerIncreasePerPhase"),
+        properties.Array(director, "Phases setup")
+            .OfType<IPropertyHolder>()
+            .Select((phase, index) => ReadDestructionPhase(phase, index, transforms))
+            .ToArray(),
+        context.FindActorsDerivedFrom("BP_NoDeployZone_Destruction_C")
+            .Select(zone => ReadNoDeployZone(zone, context, transforms))
+            .ToArray());
+
+    private CaptureDestructionPhase ReadDestructionPhase(
+        IPropertyHolder phase,
+        int index,
+        SceneTransformResolver transforms) => new(
+        index,
+        properties.ArrayStartingWith(phase, "Phaseobjectives_")
+            .Select(properties.ResolveObject)
+            .Where(actor => actor is not null)
+            .Cast<UObject>()
+            .Select(actor => ReadDestructionObjective(actor, transforms))
+            .ToArray());
+
+    private CaptureDestructionObjective ReadDestructionObjective(UObject actor, SceneTransformResolver transforms) => new(
+        properties.IntInherited(actor, 0, "Number of spots"),
+        properties.IntInherited(actor, 0, "Min Distance Between Spots"),
+        UnrealPropertyReader.ToInt(properties.RawInherited(actor, "Number of caches")),
+        ReadSplinePoints(properties.ObjectInherited(actor, "ObjectiveAreaBorder"), transforms));
+
+    private IReadOnlyList<CaptureDestructionSplinePoint> ReadSplinePoints(
+        UObject? border,
+        SceneTransformResolver transforms)
+    {
+        var spline = properties.ObjectInherited(border, "Spline", "RootComponent");
+        var position = properties.Struct(properties.Struct(spline, "SplineCurves"), "Position");
+        var transform = transforms.ResolveComponent(spline);
+        return properties.Array(position, "Points")
+            .OfType<IPropertyHolder>()
+            .Select(point => transforms.TransformPosition(transform, properties.Vector(point, "OutVal")))
+            .Select(point => new CaptureDestructionSplinePoint(point.X, point.Y, point.Z))
+            .ToArray();
+    }
+
+    private CaptureDestructionNoDeployZone ReadNoDeployZone(
+        UObject actor,
+        LayerReadContext context,
+        SceneTransformResolver transforms)
+    {
+        var transform = transforms.ResolveActor(actor);
+        var components = context.OwnedBy(actor)
+            .Where(component => component.ExportType is "SphereComponent" or "BoxComponent")
+            .Select(component => ReadNoDeployVolume(component, transforms))
+            .ToArray();
+
+        return new CaptureDestructionNoDeployZone(
+            actor.Name,
+            actor.ExportType,
+            transform.Location.X,
+            transform.Location.Y,
+            transform.Location.Z,
+            components);
+    }
+
+    private CaptureDestructionNoDeployVolume ReadNoDeployVolume(UObject component, SceneTransformResolver transforms)
+    {
+        var transform = transforms.ResolveComponent(component);
+        var extent = component.ExportType.Equals("SphereComponent", StringComparison.OrdinalIgnoreCase)
+            ? new Vec3(
+                properties.DoubleInherited(component, 32, "SphereRadius"),
+                properties.DoubleInherited(component, 32, "SphereRadius"),
+                properties.DoubleInherited(component, 32, "SphereRadius"))
+            : properties.VectorInherited(component, "BoxExtent", new Vec3(32, 32, 32));
+        var scaled = new Vec3(
+            VolumeTransformMath.Multiply(extent.X, transform.Scale.X),
+            VolumeTransformMath.Multiply(extent.Y, transform.Scale.Y),
+            VolumeTransformMath.Multiply(extent.Z, transform.Scale.Z));
+        var radius = component.ExportType.Equals("SphereComponent", StringComparison.OrdinalIgnoreCase)
+            ? Math.Max(scaled.X, Math.Max(scaled.Y, scaled.Z))
+            : VolumeTransformMath.Size(scaled);
+
+        return new CaptureDestructionNoDeployVolume(
+            transform.Location.X,
+            transform.Location.Y,
+            transform.Location.Z,
+            radius.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture),
+            new CaptureDestructionExtent(scaled.X, scaled.Y, scaled.Z));
+    }
+
+    private static CaptureObjectiveSpawnLocation ReadObjectiveSpawnLocation(
+        UObject actor,
+        SceneTransformResolver transforms)
+    {
+        var transform = transforms.ResolveActor(actor);
+        return new CaptureObjectiveSpawnLocation(
+            actor.Name,
+            transform.Location.X,
+            transform.Location.Y,
+            transform.Location.Z);
+    }
+
+    private static string ReadTeam(string value)
+    {
+        var team = TextFormatting.EnumToken(value);
+        return string.IsNullOrWhiteSpace(team) ? "Neutral" : team.Replace('_', ' ');
     }
 
     private static string GetSeedPointName(UObject actor)
