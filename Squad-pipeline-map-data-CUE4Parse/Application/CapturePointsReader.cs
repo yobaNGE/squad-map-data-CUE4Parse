@@ -25,7 +25,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
     {
         var initializer = context.FindExact("SQGraphRAASInitializerComponent").FirstOrDefault()
                           ?? FindExport(context, "SQGraphAASInitializerComponent");
-        var links = ReadLinks(initializer, "DesignOutgoingLinks");
+        var links = CapturePointNames.NormalizeMains(ReadLinks(initializer, "DesignOutgoingLinks"));
         var pointsOrder = BuildPointsOrder(links);
 
         return CapturePoints.Empty("Invasion Graph") with
@@ -41,7 +41,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
     private CapturePoints ReadAas(LayerReadContext context)
     {
         var initializer = FindExport(context, "SQGraphAASInitializerComponent");
-        var links = ReadLinks(initializer, "DesignOutgoingLinks", GetCapturePointName);
+        var links = CapturePointNames.NormalizeMains(ReadLinks(initializer, "DesignOutgoingLinks", GetCapturePointName));
         var graph = BuildDirectedGraph(links);
 
         return CapturePoints.Empty("AAS Graph") with
@@ -69,9 +69,9 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
             var laneName = UnrealPropertyReader.ToStringValue(properties.RawStartingWith(lane, "LaneName_"));
             if (string.IsNullOrWhiteSpace(laneName)) continue;
 
-            var laneLinks = ReadLinks(
+            var laneLinks = CapturePointNames.NormalizeMains(ReadLinks(
                 properties.ArrayStartingWith(lane, "AASLaneLinks_"),
-                actor => GetRaasNodeName(actor, clusters));
+                actor => GetRaasNodeName(actor, clusters)));
             var pointsOrder = BuildPointsOrder(laneLinks);
             laneNames.Add(laneName);
             allLinks.AddRange(laneLinks);
@@ -94,7 +94,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         var initializer = FindExport(context, "SQGraphAASInitializerComponent");
         var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var pointNumber = 0;
-        var links = ReadLinks(initializer, "DesignOutgoingLinks", GetSkirmishPointName);
+        var links = CapturePointNames.NormalizeMains(ReadLinks(initializer, "DesignOutgoingLinks", GetSkirmishPointName));
         var graph = BuildDirectedGraph(links);
 
         return CapturePoints.Empty("Skirmish Graph") with
@@ -157,7 +157,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
     private CapturePoints ReadSeed(LayerReadContext context)
     {
         var initializer = FindExport(context, "SQGraphAASInitializerComponent");
-        var links = ReadLinks(initializer, "DesignOutgoingLinks", GetSeedPointName);
+        var links = CapturePointNames.NormalizeMains(ReadLinks(initializer, "DesignOutgoingLinks", GetSeedPointName));
         var pointsOrder = BuildPointsOrder(links);
 
         return CapturePoints.Empty("AAS Graph") with
