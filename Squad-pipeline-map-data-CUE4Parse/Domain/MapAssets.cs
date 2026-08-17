@@ -4,12 +4,18 @@ namespace Squad_pipeline_map_data_CUE4Parse.Domain;
 
 public sealed record MapAssets(
     [property: JsonPropertyName("protectionZones")] IReadOnlyList<ProtectionZone> ProtectionZones,
+    [property: JsonPropertyName("stagingZones")] IReadOnlyList<StagingZone> StagingZones,
     [property: JsonPropertyName("spawnGroups")] IReadOnlyList<SpawnGroup> SpawnGroups,
     [property: JsonPropertyName("spawnPoints")] IReadOnlyList<SpawnPoint> SpawnPoints);
 
 public sealed record ProtectionZone(
     [property: JsonPropertyName("displayName")] string DisplayName,
     [property: JsonPropertyName("deployableLockDistance")] double DeployableLockDistance,
+    [property: JsonPropertyName("teamid")] string TeamId,
+    [property: JsonPropertyName("objects")] IReadOnlyList<MapAssetVolume> Objects);
+
+public sealed record StagingZone(
+    [property: JsonPropertyName("displayName")] string DisplayName,
     [property: JsonPropertyName("teamid")] string TeamId,
     [property: JsonPropertyName("objects")] IReadOnlyList<MapAssetVolume> Objects);
 
