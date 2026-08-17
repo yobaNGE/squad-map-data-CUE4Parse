@@ -8,6 +8,10 @@ internal static class VolumeTransformMath
 
     public static double ScaleSphereRadius(double radius, Vec3 scale) => Multiply(radius, scale.Z);
 
+    public static double ScaleCapsuleRadius(double radius, Vec3 scale) => Multiply(radius, scale.Y);
+
+    public static double ScaleCapsuleHalfHeight(double halfHeight, Vec3 scale) => Multiply(halfHeight, scale.Z);
+
     public static double Size(Vec3 value) => MathF.Sqrt(
         (float)(value.X * value.X + value.Y * value.Y + value.Z * value.Z));
 

@@ -136,15 +136,17 @@ internal sealed partial class MapAssetsReader(UnrealPropertyReader properties)
     {
         var baseRadius = properties.DoubleInherited(component, 0, "CapsuleRadius");
         var halfHeight = properties.DoubleInherited(component, 0, "CapsuleHalfHeight");
+        var radius = VolumeTransformMath.ScaleCapsuleRadius(baseRadius, transform.Scale);
+        var height = VolumeTransformMath.ScaleCapsuleHalfHeight(halfHeight, transform.Scale);
         var extent = new Vec3(
-            VolumeTransformMath.Multiply(baseRadius, transform.Scale.X),
-            VolumeTransformMath.Multiply(baseRadius, transform.Scale.Y),
-            VolumeTransformMath.Multiply(halfHeight, transform.Scale.Z));
+            radius,
+            radius,
+            height);
         return CreateVolume(
             component,
             transform,
             false,
-            Math.Max(extent.X, extent.Y),
+            radius,
             false,
             extent,
             true);
