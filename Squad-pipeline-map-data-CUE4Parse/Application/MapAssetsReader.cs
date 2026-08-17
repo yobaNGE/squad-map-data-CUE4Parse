@@ -102,16 +102,13 @@ internal sealed partial class MapAssetsReader(UnrealPropertyReader properties)
     private MapAssetVolume ReadSphere(UObject component, SceneTransform transform)
     {
         var baseRadius = properties.DoubleInherited(component, 0, "SphereRadius");
-        var scaled = new Vec3(
-            VolumeTransformMath.Multiply(baseRadius, transform.Scale.X),
-            VolumeTransformMath.Multiply(baseRadius, transform.Scale.Y),
-            VolumeTransformMath.Multiply(baseRadius, transform.Scale.Z));
-        var extent = VolumeTransformMath.RotateExtents(scaled, transform.Rotation);
+        var radius = VolumeTransformMath.ScaleSphereRadius(baseRadius, transform.Scale);
+        var extent = new Vec3(radius, radius, radius);
         return CreateVolume(
             component,
             transform,
             true,
-            VolumeTransformMath.RotateRadius(scaled, transform.Rotation),
+            radius,
             false,
             extent,
             false);

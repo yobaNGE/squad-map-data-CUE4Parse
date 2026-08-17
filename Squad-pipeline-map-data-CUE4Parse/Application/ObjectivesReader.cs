@@ -363,11 +363,8 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
     private VolumeWithRadius ReadSphere(UObject component, SceneTransform transform, bool includeScaling)
     {
         var baseRadius = properties.DoubleInherited(component, 0, "SphereRadius");
-        var x = VolumeTransformMath.Multiply(baseRadius, transform.Scale.X);
-        var y = VolumeTransformMath.Multiply(baseRadius, transform.Scale.Y);
-        var z = VolumeTransformMath.Multiply(baseRadius, transform.Scale.Z);
-        var extents = VolumeTransformMath.RotateExtents(new Vec3(x, y, z), transform.Rotation);
-        var radius = VolumeTransformMath.RotateRadius(new Vec3(x, y, z), transform.Rotation);
+        var radius = VolumeTransformMath.ScaleSphereRadius(baseRadius, transform.Scale);
+        var extents = new Vec3(radius, radius, radius);
         return new VolumeWithRadius(
             CreateVolume(component, transform, true, radius, false,
                 CreateExtent(extents.X, extents.Y, extents.Z, transform, includeScaling), false),

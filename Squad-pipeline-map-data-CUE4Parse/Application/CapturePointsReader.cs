@@ -266,19 +266,22 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
     private CaptureDestructionNoDeployVolume ReadNoDeployVolume(UObject component, SceneTransformResolver transforms)
     {
         var transform = transforms.ResolveComponent(component);
-        var extent = component.ExportType.Equals("SphereComponent", StringComparison.OrdinalIgnoreCase)
-            ? new Vec3(
-                properties.DoubleInherited(component, 32, "SphereRadius"),
-                properties.DoubleInherited(component, 32, "SphereRadius"),
-                properties.DoubleInherited(component, 32, "SphereRadius"))
+        var isSphere = component.ExportType.Equals("SphereComponent", StringComparison.OrdinalIgnoreCase);
+        var baseExtent = isSphere
+            ? Vec3.Zero
             : properties.VectorInherited(component, "BoxExtent", new Vec3(32, 32, 32));
-        var scaled = new Vec3(
-            VolumeTransformMath.Multiply(extent.X, transform.Scale.X),
-            VolumeTransformMath.Multiply(extent.Y, transform.Scale.Y),
-            VolumeTransformMath.Multiply(extent.Z, transform.Scale.Z));
-        var radius = component.ExportType.Equals("SphereComponent", StringComparison.OrdinalIgnoreCase)
-            ? Math.Max(scaled.X, Math.Max(scaled.Y, scaled.Z))
-            : VolumeTransformMath.Size(scaled);
+        var sphereRadius = isSphere
+            ? VolumeTransformMath.ScaleSphereRadius(
+                properties.DoubleInherited(component, 32, "SphereRadius"),
+                transform.Scale)
+            : 0;
+        var scaled = isSphere
+            ? new Vec3(sphereRadius, sphereRadius, sphereRadius)
+            : new Vec3(
+                VolumeTransformMath.Multiply(baseExtent.X, transform.Scale.X),
+                VolumeTransformMath.Multiply(baseExtent.Y, transform.Scale.Y),
+                VolumeTransformMath.Multiply(baseExtent.Z, transform.Scale.Z));
+        var radius = isSphere ? sphereRadius : VolumeTransformMath.Size(scaled);
 
         return new CaptureDestructionNoDeployVolume(
             transform.Location.X,
