@@ -12,6 +12,7 @@ internal sealed partial class MapAssetsReader(UnrealPropertyReader properties)
     {
         var transforms = context.Transforms;
         var zoneActors = context.FindExact("Gameplay_TeamZone_C");
+        var stagingZoneActors = context.FindExact("Gameplay_TeamPrep_C");
         var groupActors = context.FindExact("SQTeamSpawnGroup");
         var zoneNames = BuildDisplayNames(zoneActors, adjustSpawnTokens: false);
         var groupNames = BuildDisplayNames(groupActors, adjustSpawnTokens: true);
@@ -23,12 +24,15 @@ internal sealed partial class MapAssetsReader(UnrealPropertyReader properties)
         var protectionZones = zoneActors
             .Select(actor => ReadProtectionZone(actor, zoneNames[actor.GetPathName()], context, transforms))
             .ToArray();
+        var stagingZones = stagingZoneActors
+            .Select(actor => ReadStagingZone(actor, context, transforms))
+            .ToArray();
         var spawnGroups = groupActors.Select(actor => groupsByPath[actor.GetPathName()]).ToArray();
         var spawnPoints = context.FindExact("SQTeamSpawnPoint")
             .Select(actor => ReadSpawnPoint(actor, groupsByPath, transforms))
             .ToArray();
 
-        return new MapAssets(protectionZones, spawnGroups, spawnPoints);
+        return new MapAssets(protectionZones, stagingZones, spawnGroups, spawnPoints);
     }
 
     private ProtectionZone ReadProtectionZone(
@@ -39,12 +43,26 @@ internal sealed partial class MapAssetsReader(UnrealPropertyReader properties)
         displayName,
         properties.DoubleInherited(actor, 15000, "DeployableLockDistance"),
         properties.IntInherited(actor, 0, "TeamId").ToString(),
+        ReadZoneVolumes(actor, context, transforms));
+
+    private StagingZone ReadStagingZone(
+        UObject actor,
+        LayerReadContext context,
+        SceneTransformResolver transforms) => new(
+        properties.String(actor, actor.Name, "ActorLabel"),
+        properties.IntInherited(actor, 0, "TeamId").ToString(),
+        ReadZoneVolumes(actor, context, transforms));
+
+    private IReadOnlyList<MapAssetVolume> ReadZoneVolumes(
+        UObject actor,
+        LayerReadContext context,
+        SceneTransformResolver transforms) =>
         context.OwnedBy(actor)
             .Where(export => IsOwnedBy(export, actor) && IsVolume(export) &&
                              !export.Name.Equals("DummyPresetCollision", StringComparison.OrdinalIgnoreCase))
             .OrderBy(export => export.Name, StringComparer.OrdinalIgnoreCase)
             .Select(component => ReadVolume(component, transforms))
-            .ToArray());
+            .ToArray();
 
     private SpawnGroup ReadSpawnGroup(UObject actor, string displayName, SceneTransformResolver transforms)
     {
