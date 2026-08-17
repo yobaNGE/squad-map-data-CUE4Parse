@@ -24,7 +24,11 @@ public sealed record CapturePoints(
 public sealed record CaptureLink(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("nodeA")] string NodeA,
-    [property: JsonPropertyName("nodeB")] string NodeB);
+    [property: JsonPropertyName("nodeB")] string NodeB,
+    [property: JsonIgnore] string NodeAPath,
+    [property: JsonIgnore] string NodeBPath,
+    [property: JsonIgnore] bool NodeAIsMain,
+    [property: JsonIgnore] bool NodeBIsMain);
 
 public sealed record CapturePointGraph(
     [property: JsonPropertyName("pointsOrder"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -36,7 +40,8 @@ public sealed record CapturePointGraph(
     [property: JsonPropertyName("links"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CaptureLink>? Links = null,
     [property: JsonPropertyName("objectives"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<CaptureObjective>? Objectives = null);
+    IReadOnlyList<CaptureObjective>? Objectives = null,
+    [property: JsonIgnore] IReadOnlyDictionary<string, int>? PositionsByPath = null);
 
 public sealed record CaptureClusterGraph(
     [property: JsonPropertyName("links"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
