@@ -375,13 +375,11 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
     {
         var radius = properties.DoubleInherited(component, 0, "CapsuleRadius");
         var halfHeight = properties.DoubleInherited(component, 0, "CapsuleHalfHeight");
-        var radiusX = VolumeTransformMath.Multiply(radius, transform.Scale.X);
-        var radiusY = VolumeTransformMath.Multiply(radius, transform.Scale.Y);
-        var scaledRadius = Math.Max(radiusX, radiusY);
-        var scaledHalfHeight = VolumeTransformMath.Multiply(halfHeight, transform.Scale.Z);
+        var scaledRadius = VolumeTransformMath.ScaleCapsuleRadius(radius, transform.Scale);
+        var scaledHalfHeight = VolumeTransformMath.ScaleCapsuleHalfHeight(halfHeight, transform.Scale);
         var length = scaledHalfHeight;
         var extents = VolumeTransformMath.RotateExtents(
-            new Vec3(radiusX, radiusY, scaledHalfHeight),
+            new Vec3(scaledRadius, scaledRadius, scaledHalfHeight),
             transform.Rotation);
         var extent = CreateExtent(extents.X, extents.Y, extents.Z, transform, includeScaling);
         var volume = CreateVolume(component, transform, false, length, false, extent, true) with
