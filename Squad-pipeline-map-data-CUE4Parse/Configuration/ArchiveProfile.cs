@@ -31,6 +31,7 @@ public sealed record ArchiveProfile
     public string? MappingsPath { get; init; }
     public string OutputDirectory { get; init; } = Path.Combine(Environment.CurrentDirectory, "output");
     public int ExportParallelism { get; init; } = 2;
+    public bool IgnoreMissingFactionPrimaryAssets { get; init; }
 
     [JsonIgnore]
     public IReadOnlyList<AesKeyEntry> AesKeys { get; init; } = [];

@@ -43,15 +43,16 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
     {
         var initializer = FindExport(context, "SQGraphAASInitializerComponent");
         var links = ReadLinks(initializer, "DesignOutgoingLinks", GetCapturePointName);
-        var pointsOrder = BuildPointsOrder(links);
+        var graph = BuildDirectedGraph(links);
 
         return CapturePoints.Empty("AAS Graph") with
         {
             Points = new CapturePointGraph(
-                pointsOrder,
-                pointsOrder.Distinct(StringComparer.OrdinalIgnoreCase).Count(),
-                FindMains(pointsOrder),
-                links)
+                graph.PointsOrder,
+                graph.NumberOfPoints,
+                graph.Mains,
+                links,
+                PositionsByPath: graph.PositionsByPath)
         };
     }
 
@@ -95,17 +96,16 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var pointNumber = 0;
         var links = ReadLinks(initializer, "DesignOutgoingLinks", GetSkirmishPointName);
-        var nodes = links.SelectMany(link => new[] { link.NodeA, link.NodeB })
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var graph = BuildDirectedGraph(links);
 
         return CapturePoints.Empty("Skirmish Graph") with
         {
             Points = new CapturePointGraph(
                 ["invalidForSkirmishGameMode"],
-                nodes.Length,
-                FindMains(nodes),
-                links)
+                graph.NumberOfPoints,
+                graph.Mains,
+                links,
+                PositionsByPath: graph.PositionsByPath)
         };
 
         string GetSkirmishPointName(UObject actor)
@@ -413,9 +413,64 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
             result.Add(new CaptureLink(
                 $"Link{result.Count}",
                 getNodeName(nodeA),
-                getNodeName(nodeB)));
+                getNodeName(nodeB),
+                nodeA.GetPathName(),
+                nodeB.GetPathName(),
+                IsMain(nodeA),
+                IsMain(nodeB)));
         }
         return result;
+    }
+
+    private static DirectedGraph BuildDirectedGraph(IReadOnlyList<CaptureLink> links)
+    {
+        var nodes = new Dictionary<string, AasGraphNode>(StringComparer.OrdinalIgnoreCase);
+        var outgoing = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var incomingCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var link in links)
+        {
+            AddNode(link.NodeAPath, link.NodeA, link.NodeAIsMain);
+            AddNode(link.NodeBPath, link.NodeB, link.NodeBIsMain);
+            outgoing[link.NodeAPath].Add(link.NodeBPath);
+            incomingCount[link.NodeBPath]++;
+        }
+
+        var queue = new Queue<string>(nodes.Keys.Where(path => incomingCount[path] == 0));
+        var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in queue) positions[source] = 1;
+
+        var pointsOrder = new List<string>(nodes.Count);
+        while (queue.TryDequeue(out var path))
+        {
+            pointsOrder.Add(nodes[path].Name);
+            foreach (var destination in outgoing[path])
+            {
+                var position = positions[path] + 1;
+                if (positions.TryGetValue(destination, out var existingPosition) && existingPosition != position)
+                    throw new InvalidDataException(
+                    $"Capture graph node '{nodes[destination].Name}' has no unambiguous position.");
+
+                positions[destination] = position;
+                if (--incomingCount[destination] == 0) queue.Enqueue(destination);
+            }
+        }
+
+        if (pointsOrder.Count != nodes.Count)
+            throw new InvalidDataException("Capture graph contains a directed cycle.");
+
+        return new DirectedGraph(
+            pointsOrder,
+            nodes.Count,
+            nodes.Values.Where(node => node.IsMain).Select(node => node.Name).ToArray(),
+            positions);
+
+        void AddNode(string path, string name, bool isMain)
+        {
+            if (!nodes.TryAdd(path, new AasGraphNode(name, isMain))) return;
+            outgoing[path] = [];
+            incomingCount[path] = 0;
+        }
     }
 
     private static IReadOnlyList<string> BuildPointsOrder(IReadOnlyList<CaptureLink> links)
@@ -493,6 +548,9 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
 
+    private static bool IsMain(UObject actor) =>
+        actor.ExportType.Equals("BP_CaptureZoneMain_C", StringComparison.OrdinalIgnoreCase);
+
     private string GetCapturePointName(UObject actor)
     {
         var graphName = GetGraphNodeName(actor);
@@ -534,4 +592,12 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
 
         return actor.Name;
     }
+
+    private sealed record DirectedGraph(
+        IReadOnlyList<string> PointsOrder,
+        int NumberOfPoints,
+        IReadOnlyList<string> Mains,
+        IReadOnlyDictionary<string, int> PositionsByPath);
+
+    private sealed record AasGraphNode(string Name, bool IsMain);
 }

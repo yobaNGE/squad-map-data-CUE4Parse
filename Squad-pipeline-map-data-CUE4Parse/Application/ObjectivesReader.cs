@@ -104,9 +104,8 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         CapturePoints capturePoints)
     {
         var transforms = new ObjectiveTransformResolver(properties);
-        var order = capturePoints.Points.PointsOrder ?? [];
-        var positions = order.Select((name, index) => (name, position: index + 1))
-            .ToDictionary(entry => entry.name, entry => entry.position, StringComparer.OrdinalIgnoreCase);
+        var positions = capturePoints.Points.PositionsByPath ??
+                        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var result = new Dictionary<string, LayerObjective>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var actor in context.FindExact("BP_CaptureZone_C"))
@@ -119,7 +118,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetGraphNodeName(main);
-            result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), context, transforms, false);
+            result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(main.GetPathName()), context, transforms, false);
         }
         return result;
     }
@@ -205,16 +204,13 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             result[actor.Name] = ReadCaptureActor(actor, displayName, context, transforms);
         }
 
-        var mainPositions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["00-Team1 Main"] = 1,
-            ["Z-Team2 Main"] = (capturePoints.Points.Links?.Count ?? 0) + 1
-        };
+        var mainPositions = capturePoints.Points.PositionsByPath ??
+                            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetGraphNodeName(main);
-            result[name] = ReadActor(main, name, "Main", mainPositions[name], context, transforms, false);
+            result[name] = ReadActor(main, name, "Main", mainPositions.GetValueOrDefault(main.GetPathName()), context, transforms, false);
         }
         return result;
     }

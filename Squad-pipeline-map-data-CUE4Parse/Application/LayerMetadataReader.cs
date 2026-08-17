@@ -12,7 +12,9 @@ public interface ILayerMetadataReader
     Task<LayerMetadata> ReadAsync(LayerDescriptor layer, CancellationToken cancellationToken = default);
 }
 
-public sealed partial class LayerMetadataReader(IGameAssetProvider assets) : ILayerMetadataReader
+public sealed partial class LayerMetadataReader(
+    IGameAssetProvider assets,
+    bool ignoreMissingFactionPrimaryAssets = false) : ILayerMetadataReader
 {
     private readonly UnrealPropertyReader _properties = new(assets);
     private readonly LevelDisplayNameIndex _levelNames = new(assets);
@@ -24,7 +26,7 @@ public sealed partial class LayerMetadataReader(IGameAssetProvider assets) : ILa
     private readonly LayerFactionSelectionReader _factionSelections = new(assets);
     private readonly TeamConfigsReader _teamConfigs = new(assets);
     private readonly LayerAvailabilityReader _availability = new(new UnrealPropertyReader(assets));
-    private readonly UnitsReader _units = new(assets);
+    private readonly UnitsReader _units = new(assets, ignoreMissingFactionPrimaryAssets);
 
     public Task<LayerMetadata> ReadAsync(LayerDescriptor descriptor, CancellationToken cancellationToken = default) =>
         Task.Run(() => Read(descriptor, cancellationToken), cancellationToken);

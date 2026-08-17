@@ -38,6 +38,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string _outputDirectory = string.Empty;
     private string _workshopPath = string.Empty;
     private int _exportParallelism = 2;
+    private bool _ignoreMissingFactionPrimaryAssets;
     private string _searchText = string.Empty;
     private string _selectedMap = AllMaps;
     private string _selectedGameMode = AllGameModes;
@@ -121,6 +122,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         get => _exportParallelism;
         set => SetProperty(ref _exportParallelism, value);
+    }
+
+    public bool IgnoreMissingFactionPrimaryAssets
+    {
+        get => _ignoreMissingFactionPrimaryAssets;
+        set => SetProperty(ref _ignoreMissingFactionPrimaryAssets, value);
     }
 
     public string SearchText
@@ -287,6 +294,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         MappingsPath = profile.MappingsPath ?? string.Empty;
         OutputDirectory = profile.OutputDirectory;
         ExportParallelism = Math.Clamp(profile.ExportParallelism, 1, 8);
+        IgnoreMissingFactionPrimaryAssets = profile.IgnoreMissingFactionPrimaryAssets;
         UpdateContentLayout();
         WorkshopPath = UsesWorkshop
             ? _modDiscovery.ResolveWorkshopPath(profile.SquadPath, profile.WorkshopPath)
@@ -449,6 +457,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             : OutputDirectory.Trim(),
         WorkshopPath = string.IsNullOrWhiteSpace(WorkshopPath) ? null : WorkshopPath.Trim(),
         ExportParallelism = Math.Clamp(ExportParallelism, 1, 8),
+        IgnoreMissingFactionPrimaryAssets = IgnoreMissingFactionPrimaryAssets,
         Mods = ContentSources.Where(source => source.Mod is not null)
             .Select(source => source.ToModProfile()).ToArray(),
         SdkPlugins = ContentSources.Where(source => source.SdkPlugin is not null)
@@ -496,11 +505,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             source => source.Id,
             source => _cache.BuildSourceKey(source, vanilla, _mappingsSignature),
             StringComparer.OrdinalIgnoreCase);
+        var metadataSettings = $"{_mappingsSignature}|ignore-missing-faction-assets={profile.IgnoreMissingFactionPrimaryAssets}";
         _environmentKeys = sources.ToDictionary(
             source => source.Id,
             source => _cache.BuildEnvironmentKey(
                 source.IsVanilla ? [vanilla] : [vanilla, source],
-                _mappingsSignature),
+                metadataSettings),
             StringComparer.OrdinalIgnoreCase);
     }
 
@@ -529,7 +539,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             layer.Source.Id,
             sourceId => new Lazy<Task<ILayerMetadataReader>>(
                 async () => new LayerMetadataReader(
-                    await EnsureProviderPool().GetAsync(sourceId, CancellationToken.None)),
+                    await EnsureProviderPool().GetAsync(sourceId, CancellationToken.None),
+                    _profile.IgnoreMissingFactionPrimaryAssets),
                 LazyThreadSafetyMode.ExecutionAndPublication));
         return await reader.Value.WaitAsync(cancellationToken);
     }
