@@ -471,12 +471,8 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
 
     private static string FormatNumber(double value) => value.ToString("0.0#####", CultureInfo.InvariantCulture);
 
-    private static string GetGraphNodeName(UObject actor)
-    {
-        if (actor.Name.Contains("Team1Main", StringComparison.OrdinalIgnoreCase)) return "00-Team1 Main";
-        if (actor.Name.Contains("Team2Main", StringComparison.OrdinalIgnoreCase)) return "Z-Team2 Main";
-        return actor.Name;
-    }
+    private string GetGraphNodeName(UObject actor) =>
+        properties.String(actor, actor.Name, "ActorLabel");
 
     private sealed record VolumeWithRadius(ObjectiveVolume Volume, double Radius);
 

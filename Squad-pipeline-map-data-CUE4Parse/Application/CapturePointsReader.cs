@@ -1,6 +1,5 @@
 using System.IO;
 using CUE4Parse.UE4.Assets.Exports;
-using CUE4Parse.UE4.Assets.Exports.Actor;
 using CUE4Parse.UE4.Assets.Exports.StaticMesh;
 using CUE4Parse.UE4.Assets.Objects;
 using Squad_pipeline_map_data_CUE4Parse.Domain;
@@ -309,7 +308,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         return string.IsNullOrWhiteSpace(team) ? "Neutral" : team.Replace('_', ' ');
     }
 
-    private static string GetSeedPointName(UObject actor)
+    private string GetSeedPointName(UObject actor)
     {
         var graphName = GetGraphNodeName(actor);
         if (graphName.EndsWith(" Main", StringComparison.OrdinalIgnoreCase)) return graphName;
@@ -585,16 +584,8 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         return cluster is null ? GetGraphNodeName(actor) : GetGraphNodeName(cluster);
     }
 
-    private static string GetGraphNodeName(UObject actor)
-    {
-        if (actor is AActor || actor.ExportType.StartsWith("BP_CaptureZone", StringComparison.OrdinalIgnoreCase))
-        {
-            if (actor.Name.Contains("Team1Main", StringComparison.OrdinalIgnoreCase)) return "00-Team1 Main";
-            if (actor.Name.Contains("Team2Main", StringComparison.OrdinalIgnoreCase)) return "Z-Team2 Main";
-        }
-
-        return actor.Name;
-    }
+    private string GetGraphNodeName(UObject actor) =>
+        properties.String(actor, actor.Name, "ActorLabel");
 
     private sealed record DirectedGraph(
         IReadOnlyList<string> PointsOrder,
