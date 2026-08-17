@@ -29,7 +29,7 @@ internal sealed class FactionDefinitionIndex
     private FactionDefinition Read(string factionId)
     {
         var faction = _assets.LoadPrimaryAsset("BP_SQFaction_C", factionId)
-                      ?? throw new InvalidDataException($"Faction primary asset '{factionId}' was not found.");
+                      ?? throw new MissingFactionPrimaryAssetException(factionId);
         var data = _rows.Resolve(faction)
                    ?? throw new InvalidDataException($"Faction primary asset '{factionId}' has no resolvable Data row.");
         return new FactionDefinition(ValueStartingWith(data.Row, "DisplayName"));
@@ -40,3 +40,6 @@ internal sealed class FactionDefinitionIndex
 }
 
 internal sealed record FactionDefinition(string DisplayName);
+
+internal sealed class MissingFactionPrimaryAssetException(string factionId) :
+    Exception($"Faction primary asset '{factionId}' was not found.");

@@ -19,10 +19,11 @@ internal sealed class UnitsReader
     private readonly LevelBiomeResolver _biomes;
     private readonly VehicleTicketRulesReader _ticketRules;
     private readonly CommanderAssetsReader _commanderAssets;
+    private readonly bool _ignoreMissingFactionPrimaryAssets;
     private readonly ConcurrentDictionary<string, Lazy<UnitTemplate>> _templates =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public UnitsReader(IGameAssetProvider assets)
+    public UnitsReader(IGameAssetProvider assets, bool ignoreMissingFactionPrimaryAssets = false)
     {
         _assets = assets;
         _properties = new UnrealPropertyReader(assets);
@@ -33,6 +34,7 @@ internal sealed class UnitsReader
         _biomes = new LevelBiomeResolver(assets, _properties);
         _ticketRules = new VehicleTicketRulesReader(assets, _properties);
         _commanderAssets = new CommanderAssetsReader(assets);
+        _ignoreMissingFactionPrimaryAssets = ignoreMissingFactionPrimaryAssets;
     }
 
     public Units Read(LayerFactionSelections selections, UObject layer, LayerReadContext context)
@@ -58,7 +60,15 @@ internal sealed class UnitsReader
         foreach (var reference in UnitReferences(faction))
         {
             if (!addedPaths.Add(reference.ObjectPath)) continue;
-            var template = GetTemplate(reference);
+            UnitTemplate template;
+            try
+            {
+                template = GetTemplate(reference);
+            }
+            catch (MissingFactionPrimaryAssetException) when (_ignoreMissingFactionPrimaryAssets)
+            {
+                continue;
+            }
             var vehicles = _vehicles.Read(template.ObjectPath, biome, ticketRules, killerTeam)
                 .Select(ToUnitVehicle)
                 .ToArray();

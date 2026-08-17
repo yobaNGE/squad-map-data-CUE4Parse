@@ -360,9 +360,14 @@
                                                TextWrapping="Wrap" Margin="0,4,0,0" />
                                 </StackPanel>
                                 <ComboBox Grid.Column="1" ItemsSource="{Binding ParallelismOptions}"
-                                          SelectedItem="{Binding ExportParallelism}"
-                                          VerticalAlignment="Center" />
+                                           SelectedItem="{Binding ExportParallelism}"
+                                           VerticalAlignment="Center" />
                             </Grid>
+
+                            <CheckBox IsChecked="{Binding IgnoreMissingFactionPrimaryAssets}"
+                                      Content="Ignore missing faction primary assets"
+                                      ToolTip="Exports the layer without units whose faction asset is absent. Other asset errors remain fatal."
+                                      Margin="0,0,0,20" />
 
                             <Border Background="{StaticResource SurfaceRaisedBrush}" BorderBrush="{StaticResource BorderBrush}"
                                     BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,22">
