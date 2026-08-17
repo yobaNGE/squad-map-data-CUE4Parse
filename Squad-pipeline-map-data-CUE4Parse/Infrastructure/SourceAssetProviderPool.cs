@@ -43,8 +43,8 @@ public sealed class SourceAssetProviderPool(ArchiveProfile profile) : IDisposabl
 
         var sourceProfile = profile with
         {
-            Mods = !isSdk && mod is not null ? [mod with { Enabled = true }] : [],
-            SdkPlugins = isSdk && sdkPlugin is not null ? [sdkPlugin with { Enabled = true }] : [],
+            Mods = !isSdk ? profile.Mods.Where(candidate => candidate.Enabled).ToArray() : [],
+            SdkPlugins = isSdk ? profile.SdkPlugins.Where(candidate => candidate.Enabled).ToArray() : [],
             ModDirectories = []
         };
         var provider = new GameAssetProvider(sourceProfile, vanillaFallback);
