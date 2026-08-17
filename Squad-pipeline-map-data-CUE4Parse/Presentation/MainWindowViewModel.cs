@@ -506,10 +506,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             source => _cache.BuildSourceKey(source, vanilla, _mappingsSignature),
             StringComparer.OrdinalIgnoreCase);
         var metadataSettings = $"{_mappingsSignature}|ignore-missing-faction-assets={profile.IgnoreMissingFactionPrimaryAssets}";
+        var enabledSources = sources.Where(source => source.Enabled).ToArray();
         _environmentKeys = sources.ToDictionary(
             source => source.Id,
             source => _cache.BuildEnvironmentKey(
-                source.IsVanilla ? [vanilla] : [vanilla, source],
+                enabledSources,
                 metadataSettings),
             StringComparer.OrdinalIgnoreCase);
     }
