@@ -8,7 +8,7 @@ public sealed record CapturePoints(
     [property: JsonPropertyName("points")] CapturePointGraph Points,
     [property: JsonPropertyName("clusters")] CaptureClusterGraph Clusters,
     [property: JsonPropertyName("hexs")] CaptureHexs Hexs,
-    [property: JsonPropertyName("objectiveSpawnLocations")] IReadOnlyList<object> ObjectiveSpawnLocations,
+    [property: JsonPropertyName("objectiveSpawnLocations")] IReadOnlyList<CaptureObjectiveSpawnLocation> ObjectiveSpawnLocations,
     [property: JsonPropertyName("destructionObject")] CaptureDestructionObject DestructionObject)
 {
     public static CapturePoints Empty(string type = "Unknown") => new(
@@ -105,4 +105,52 @@ public sealed record CaptureObjective(
     [property: JsonPropertyName("objects")] IReadOnlyList<ObjectiveVolume> Objects,
     [property: JsonPropertyName("pointPosition")] int PointPosition);
 
-public sealed record CaptureDestructionObject;
+public sealed record CaptureObjectiveSpawnLocation(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("location_x")] double LocationX,
+    [property: JsonPropertyName("location_y")] double LocationY,
+    [property: JsonPropertyName("location_z")] double LocationZ);
+
+public sealed record CaptureDestructionObject(
+    [property: JsonPropertyName("attackingTeam"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? AttackingTeam = null,
+    [property: JsonPropertyName("delayBetweenPhases"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DelayBetweenPhases = null,
+    [property: JsonPropertyName("objectiveClass"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ObjectiveClass = null,
+    [property: JsonPropertyName("roundTimerIncrease"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? RoundTimerIncrease = null,
+    [property: JsonPropertyName("timerIncreasePerPhaseActive"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? TimerIncreasePerPhaseActive = null,
+    [property: JsonPropertyName("phases"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CaptureDestructionPhase>? Phases = null,
+    [property: JsonPropertyName("noDeployZones"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CaptureDestructionNoDeployZone>? NoDeployZones = null);
+
+public sealed record CaptureDestructionPhase(
+    [property: JsonPropertyName("PhaseNumber")] int PhaseNumber,
+    [property: JsonPropertyName("phaseObjectives")] IReadOnlyList<CaptureDestructionObjective> PhaseObjectives);
+
+public sealed record CaptureDestructionObjective(
+    [property: JsonPropertyName("numberOfSpots")] int NumberOfSpots,
+    [property: JsonPropertyName("minDistanceBetweenSpots")] int MinDistanceBetweenSpots,
+    [property: JsonPropertyName("numberOfCaches"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? NumberOfCaches,
+    [property: JsonPropertyName("splinePoints")] IReadOnlyList<CaptureDestructionSplinePoint> SplinePoints);
+
+public sealed record CaptureDestructionSplinePoint(
+    [property: JsonPropertyName("location_x")] double LocationX,
+    [property: JsonPropertyName("location_y")] double LocationY,
+    [property: JsonPropertyName("location_z")] double LocationZ);
+
+public sealed record CaptureDestructionNoDeployZone(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("location_x")] double LocationX,
+    [property: JsonPropertyName("location_y")] double LocationY,
+    [property: JsonPropertyName("location_z")] double LocationZ,
+    [property: JsonPropertyName("objects")] IReadOnlyList<CaptureDestructionNoDeployVolume> Objects);
+
+public sealed record CaptureDestructionNoDeployVolume(
+    [property: JsonPropertyName("location_x")] double LocationX,
+    [property: JsonPropertyName("location_y")] double LocationY,
+    [property: JsonPropertyName("location_z")] double LocationZ,
+    [property: JsonPropertyName("sphereRadius")] string SphereRadius,
+    [property: JsonPropertyName("boxExtent")] CaptureDestructionExtent BoxExtent);
+
+public sealed record CaptureDestructionExtent(
+    [property: JsonPropertyName("location_x")] double LocationX,
+    [property: JsonPropertyName("location_y")] double LocationY,
+    [property: JsonPropertyName("location_z")] double LocationZ);
