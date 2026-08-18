@@ -593,7 +593,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         IReadOnlyList<UObject> clusters)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var captureZone in context.FindExact("BP_CaptureZone_C"))
+        foreach (var captureZone in context.FindExact("BP_CaptureZone_C", "BP_CaptureZoneInvasion_C"))
         {
             result.Add(captureZone.GetPathName());
             if (FindRaasCluster(captureZone, clusters) is { } cluster)

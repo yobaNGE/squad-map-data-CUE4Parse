@@ -134,7 +134,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         var nodeNames = CapturePointNames.ByPath(capturePoints.Lanes.Links);
         var pointsByCluster = new Dictionary<string, List<ObjectivePoint>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var actor in context.FindExact("BP_CaptureZone_C"))
+        foreach (var actor in context.FindExact("BP_CaptureZone_C", "BP_CaptureZoneInvasion_C"))
         {
             var cluster = FindParentActor(actor, clusters);
             var clusterName = cluster is null ? GetGraphNodeName(actor) : GetGraphNodeName(cluster);

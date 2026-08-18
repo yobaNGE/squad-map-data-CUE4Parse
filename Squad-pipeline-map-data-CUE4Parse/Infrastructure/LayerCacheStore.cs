@@ -28,7 +28,7 @@ public sealed record SourceCacheState(
 
 public sealed class LayerCacheStore
 {
-    public const int SchemaVersion = 5;
+    public const int SchemaVersion = 6;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
