@@ -190,22 +190,14 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
     {
         var transforms = new ObjectiveTransformResolver(properties);
         var nodeNames = CapturePointNames.ByPath(capturePoints.Points.Links);
-        var actorsByFlagName = context.FindExact("BP_CaptureZone_C")
-            .GroupBy(actor => ReadFlagName(actor, context), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        var objectiveNames = (capturePoints.Points.Links ?? [])
-            .SelectMany(link => new[] { link.NodeA, link.NodeB })
-            .Where(name => !name.EndsWith(" Main", StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var actorsByPath = context.FindExact("BP_CaptureZone_C")
+            .ToDictionary(actor => actor.GetPathName(), StringComparer.OrdinalIgnoreCase);
         var result = new Dictionary<string, LayerObjective>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var displayName in objectiveNames)
+        foreach (var link in capturePoints.Points.Links ?? [])
         {
-            var separator = displayName.IndexOf('-');
-            var flagName = separator < 0 ? displayName : displayName[(separator + 1)..];
-            if (!actorsByFlagName.TryGetValue(flagName, out var actor)) continue;
-            result[actor.Name] = ReadCaptureActor(actor, displayName, context, transforms);
+            AddObjective(link.NodeAPath, link.NodeA);
+            AddObjective(link.NodeBPath, link.NodeB);
         }
 
         var mainPositions = capturePoints.Points.PositionsByPath ??
@@ -217,6 +209,13 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             result[name] = ReadActor(main, name, "Main", mainPositions.GetValueOrDefault(main.GetPathName()), context, transforms, false);
         }
         return result;
+
+        void AddObjective(string path, string displayName)
+        {
+            if (displayName.EndsWith(" Main", StringComparison.OrdinalIgnoreCase) ||
+                !actorsByPath.TryGetValue(path, out var actor)) return;
+            result[actor.Name] = ReadCaptureActor(actor, displayName, context, transforms);
+        }
     }
 
     private IReadOnlyDictionary<string, LayerObjective> ReadSeed(
