@@ -3,6 +3,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using CUE4Parse.UE4.Pak;
+using CUE4Parse.UE4.Versions;
 
 namespace Squad_pipeline_map_data_CUE4Parse.Configuration;
 
@@ -42,9 +44,7 @@ public sealed partial class WorkshopModDiscovery
             var id = Path.GetFileName(itemDirectory);
             var version = ReadModVersion(itemDirectory);
             workshopItems.TryGetValue(id, out var workshopItem);
-            var revision = string.IsNullOrWhiteSpace(workshopItem.Manifest)
-                ? BuildFileRevision(version, paksDirectory)
-                : $"{version}:{workshopItem.Manifest}";
+            var revision = BuildArchiveRevision(paksDirectory) ?? workshopItem.Manifest;
             result.Add(new ModArchiveProfile(
                 id,
                 ReadFriendlyName(pluginPath) ?? Path.GetFileNameWithoutExtension(pluginPath),
@@ -96,19 +96,36 @@ public sealed partial class WorkshopModDiscovery
         return result;
     }
 
-    private static string BuildFileRevision(string version, string paksDirectory)
+    private static string? BuildArchiveRevision(string paksDirectory)
     {
-        var builder = new StringBuilder(version);
-        foreach (var file in Directory.EnumerateFiles(paksDirectory, "*.*", SearchOption.TopDirectoryOnly)
-                     .Where(path => path.EndsWith(".pak", StringComparison.OrdinalIgnoreCase)
-                                    || path.EndsWith(".utoc", StringComparison.OrdinalIgnoreCase))
-                     .Order(StringComparer.OrdinalIgnoreCase))
+        var builder = new StringBuilder();
+        foreach (var path in Directory.EnumerateFiles(paksDirectory, "*.*", SearchOption.AllDirectories)
+                     .Where(IsArchiveIndex)
+                     .OrderBy(path => Path.GetRelativePath(paksDirectory, path), StringComparer.OrdinalIgnoreCase))
         {
-            var info = new FileInfo(file);
-            builder.Append('|').Append(info.Name).Append(':').Append(info.Length).Append(':')
-                .Append(info.LastWriteTimeUtc.Ticks);
+            builder.Append(Path.GetRelativePath(paksDirectory, path)).Append(':')
+                .Append(ArchiveIndexHash(path)).Append('\n');
         }
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
+
+        return builder.Length == 0
+            ? null
+            : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
+    }
+
+    private static bool IsArchiveIndex(string path) =>
+        path.EndsWith(".pak", StringComparison.OrdinalIgnoreCase)
+        || path.EndsWith(".utoc", StringComparison.OrdinalIgnoreCase);
+
+    private static string ArchiveIndexHash(string path)
+    {
+        if (path.EndsWith(".pak", StringComparison.OrdinalIgnoreCase))
+        {
+            using var pak = new PakFileReader(path, new VersionContainer(EGame.GAME_Squad));
+            return pak.Info.IndexHash.ToString();
+        }
+
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
     }
 
     private static string? ReadFriendlyName(string pluginPath)
