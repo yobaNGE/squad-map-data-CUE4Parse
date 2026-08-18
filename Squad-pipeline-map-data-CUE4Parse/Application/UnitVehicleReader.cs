@@ -165,7 +165,8 @@ internal sealed class UnitVehicleReader
         var versions = _properties.ArrayInherited(settings, "VehicleVersions")
             .Select(UnrealPropertyReader.Unwrap)
             .OfType<IPropertyHolder>()
-            .Select(ReadVersion)
+            .Select(version => ReadVersion(settings.GetPathName(), version))
+            .OfType<VehicleVersion>()
             .ToArray();
 
         if (versions.Length == 0)
@@ -185,12 +186,18 @@ internal sealed class UnitVehicleReader
             versions);
     }
 
-    private VehicleVersion ReadVersion(IPropertyHolder version)
+    private VehicleVersion? ReadVersion(string settingsPath, IPropertyHolder version)
     {
         var biome = UnrealPropertyReader.ToStringValue(_properties.RawStartingWith(version, "Biome_"))
                     ?? string.Empty;
-        var vehicle = _properties.ResolveObject(_properties.RawStartingWith(version, "Vehicle_"))
-                      ?? throw new InvalidDataException("VehicleVersions entry has no loadable Vehicle class.");
+        var vehicleReference = _properties.RawStartingWith(version, "Vehicle_");
+        if (string.IsNullOrWhiteSpace(UnrealPropertyReader.ToStringValue(vehicleReference)))
+            return null;
+
+        var vehicle = _properties.ResolveObject(vehicleReference)
+                      ?? throw new InvalidDataException(
+                          $"Vehicle settings '{settingsPath}' has VehicleVersions entry with no loadable Vehicle class " +
+                          $"('{UnrealPropertyReader.ToStringValue(vehicleReference) ?? vehicleReference?.ToString() ?? "empty"}').");
         return new VehicleVersion(VehicleTicketRulesReader.EnumMember(biome) ?? biome, vehicle.GetPathName());
     }
 
