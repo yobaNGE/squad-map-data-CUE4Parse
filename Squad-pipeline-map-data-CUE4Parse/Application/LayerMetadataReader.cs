@@ -1,4 +1,5 @@
 using System.IO;
+using System.Diagnostics;
 using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Assets.Exports.Engine;
 using Squad_pipeline_map_data_CUE4Parse.Domain;
@@ -10,6 +11,10 @@ public interface ILayerMetadataReader
 {
     Task<LayerMetadata> ReadAsync(LayerDescriptor layer, CancellationToken cancellationToken = default);
 }
+
+public sealed record LayerMetadataReadResult(
+    LayerMetadata Metadata,
+    IReadOnlyDictionary<string, long> Phases);
 
 public sealed partial class LayerMetadataReader(
     IGameAssetProvider assets,
@@ -31,14 +36,22 @@ public sealed partial class LayerMetadataReader(
         ignoreMissingFactionPrimaryAssets,
         skipVehiclesWithoutDataRows);
 
-    public Task<LayerMetadata> ReadAsync(LayerDescriptor descriptor, CancellationToken cancellationToken = default) =>
+    public async Task<LayerMetadata> ReadAsync(
+        LayerDescriptor descriptor,
+        CancellationToken cancellationToken = default) =>
+        (await ReadProfiledAsync(descriptor, cancellationToken)).Metadata;
+
+    public Task<LayerMetadataReadResult> ReadProfiledAsync(
+        LayerDescriptor descriptor,
+        CancellationToken cancellationToken = default) =>
         Task.Run(() => Read(descriptor, cancellationToken), cancellationToken);
 
-    private LayerMetadata Read(LayerDescriptor descriptor, CancellationToken cancellationToken)
+    private LayerMetadataReadResult Read(LayerDescriptor descriptor, CancellationToken cancellationToken)
     {
+        var profiler = new PhaseProfiler();
         cancellationToken.ThrowIfCancellationRequested();
-        var layer = assets.LoadPackageExports(descriptor.GameplayPackagePath).First(export =>
-            export.Name.Equals(descriptor.GameplayObjectName, StringComparison.OrdinalIgnoreCase));
+        var layer = profiler.Read("loadLayer", () => assets.LoadPackageExports(descriptor.GameplayPackagePath).First(export =>
+            export.Name.Equals(descriptor.GameplayObjectName, StringComparison.OrdinalIgnoreCase)));
 
         var rawName = layer.Name;
         var data = _properties.Struct(layer, "Data")
@@ -56,20 +69,20 @@ public sealed partial class LayerMetadataReader(
         var gameMode = _properties.Struct(layer, "GameMode")
                        ?? throw new InvalidDataException($"Layer '{rawName}' does not have a GameMode row handle.");
         var gamemode = _properties.String(gameMode, string.Empty, "RowName");
-        var world = ReadFirstWorld(layer);
+        var world = profiler.Read("world", () => ReadFirstWorld(layer));
         var context = new LayerReadContext(world, _properties);
-        var seaLevel = ReadSeaLevel(context);
-        var geometry = _worldGeometry.Read(context);
-        var layerAssets = _layerAssets.Read(context);
-        var capturePoints = _capturePoints.Read(context, gamemode);
-        var objectives = _objectives.Read(context, gamemode, capturePoints);
-        var mapAssets = _mapAssets.Read(context);
-        var factionSelections = _factionSelections.Read(layer);
-        var teamConfigs = _teamConfigs.Read(layer, factionSelections);
-        var availability = _availability.Read(layer, layerAssets);
-        var units = _units.Read(factionSelections, layer, context);
+        var seaLevel = profiler.Read("seaLevel", () => ReadSeaLevel(context));
+        var geometry = profiler.Read("geometry", () => _worldGeometry.Read(context));
+        var layerAssets = profiler.Read("layerAssets", () => _layerAssets.Read(context));
+        var capturePoints = profiler.Read("capturePoints", () => _capturePoints.Read(context, gamemode));
+        var objectives = profiler.Read("objectives", () => _objectives.Read(context, gamemode, capturePoints));
+        var mapAssets = profiler.Read("mapAssets", () => _mapAssets.Read(context));
+        var factionSelections = profiler.Read("factionSelections", () => _factionSelections.Read(layer));
+        var teamConfigs = profiler.Read("teamConfigs", () => _teamConfigs.Read(layer, factionSelections));
+        var availability = profiler.Read("availability", () => _availability.Read(layer, layerAssets));
+        var units = profiler.Read("units", () => _units.Read(factionSelections, layer, context));
 
-        return new LayerMetadata(
+        return new LayerMetadataReadResult(new LayerMetadata(
             name,
             rawName,
             mapId,
@@ -94,7 +107,7 @@ public sealed partial class LayerMetadataReader(
             availability.Team2Boats,
             availability.Team1Helicopters,
             availability.Team2Helicopters,
-            units);
+            units), profiler.Phases);
     }
 
     private UObject ReadFirstWorld(UObject layer)
@@ -108,5 +121,24 @@ public sealed partial class LayerMetadataReader(
 
     private int ReadSeaLevel(LayerReadContext context) =>
         _properties.Int(context.WorldSettings, 0, "SeaLevel");
+
+    private sealed class PhaseProfiler
+    {
+        private readonly Dictionary<string, long> _phases = new(StringComparer.Ordinal);
+        public IReadOnlyDictionary<string, long> Phases => _phases;
+
+        public T Read<T>(string name, Func<T> read)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
+            {
+                return read();
+            }
+            finally
+            {
+                _phases[name] = stopwatch.ElapsedMilliseconds;
+            }
+        }
+    }
 
 }
