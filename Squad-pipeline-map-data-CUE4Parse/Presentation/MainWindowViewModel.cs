@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
+using System.Text.Json;
 using System.Windows.Data;
 using System.Windows.Input;
 using Squad_pipeline_map_data_CUE4Parse.Application;
@@ -17,6 +18,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private const string AllSources = "All sources";
 
     private readonly ProfileStore _profileStore = new();
+    private readonly LayerSelectionPresetStore _selectionPresets = new();
     private readonly WorkshopModDiscovery _modDiscovery = new();
     private readonly SdkPluginDiscovery _sdkPluginDiscovery = new();
     private readonly ContentVersionService _versions = new();
@@ -39,6 +41,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string _workshopPath = string.Empty;
     private int _exportParallelism = 2;
     private bool _ignoreMissingFactionPrimaryAssets;
+    private bool _skipVehiclesWithoutDataRows;
     private string _searchText = string.Empty;
     private string _selectedMap = AllMaps;
     private string _selectedGameMode = AllGameModes;
@@ -160,6 +163,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    public bool SkipVehiclesWithoutDataRows
+    {
+        get => _skipVehiclesWithoutDataRows;
+        set => SetProperty(ref _skipVehiclesWithoutDataRows, value);
+    }
+
     public string SelectedSource
     {
         get => _selectedSource;
@@ -255,6 +264,68 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    public void SaveSelection(string path)
+    {
+        var selected = Layers.Where(layer => layer.IsSelected).Select(layer => layer.Descriptor).ToArray();
+        if (selected.Length == 0)
+        {
+            ReportError("Select at least one layer before saving a selection.");
+            return;
+        }
+
+        try
+        {
+            _selectionPresets.Save(path, new LayerSelectionPreset(
+                LayerSelectionPreset.CurrentFormat,
+                selected.Select(layer => new LayerSelectionPresetItem(
+                    layer.Source.Id,
+                    layer.GameplayPackagePath,
+                    layer.GameplayObjectName)).ToArray()));
+            StatusMessage = $"Saved {selected.Length} selected layers";
+        }
+        catch (IOException exception)
+        {
+            ReportError($"Unable to save selection: {exception.Message}");
+        }
+    }
+
+    public void LoadSelection(string path)
+    {
+        if (Layers.Count == 0)
+        {
+            ReportError("Scan content before loading a selection.");
+            return;
+        }
+
+        try
+        {
+            var preset = _selectionPresets.Load(path);
+            var ids = preset.Layers.Select(SelectionId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var restored = 0;
+            _suppressSelectionNotifications = true;
+            try
+            {
+                foreach (var layer in Layers)
+                {
+                    layer.IsSelected = ids.Contains(SelectionId(layer.Descriptor));
+                    if (layer.IsSelected) restored++;
+                }
+            }
+            finally
+            {
+                _suppressSelectionNotifications = false;
+                NotifySelectionChanged();
+            }
+
+            StatusMessage = $"Restored {restored} selected layers" +
+                            (ids.Count == restored ? string.Empty : $" · {ids.Count - restored} missing");
+        }
+        catch (Exception exception) when (exception is IOException or JsonException or InvalidDataException)
+        {
+            ReportError($"Unable to load selection: {exception.Message}");
+        }
+    }
+
     public async Task InitializeAsync()
     {
         _profile = _profileStore.Load();
@@ -295,6 +366,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         OutputDirectory = profile.OutputDirectory;
         ExportParallelism = Math.Clamp(profile.ExportParallelism, 1, 8);
         IgnoreMissingFactionPrimaryAssets = profile.IgnoreMissingFactionPrimaryAssets;
+        SkipVehiclesWithoutDataRows = profile.SkipVehiclesWithoutDataRows;
         UpdateContentLayout();
         WorkshopPath = UsesWorkshop
             ? _modDiscovery.ResolveWorkshopPath(profile.SquadPath, profile.WorkshopPath)
@@ -458,6 +530,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         WorkshopPath = string.IsNullOrWhiteSpace(WorkshopPath) ? null : WorkshopPath.Trim(),
         ExportParallelism = Math.Clamp(ExportParallelism, 1, 8),
         IgnoreMissingFactionPrimaryAssets = IgnoreMissingFactionPrimaryAssets,
+        SkipVehiclesWithoutDataRows = SkipVehiclesWithoutDataRows,
         Mods = ContentSources.Where(source => source.Mod is not null)
             .Select(source => source.ToModProfile()).ToArray(),
         SdkPlugins = ContentSources.Where(source => source.SdkPlugin is not null)
@@ -505,7 +578,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             source => source.Id,
             source => _cache.BuildSourceKey(source, vanilla, _mappingsSignature),
             StringComparer.OrdinalIgnoreCase);
-        var metadataSettings = $"{_mappingsSignature}|ignore-missing-faction-assets={profile.IgnoreMissingFactionPrimaryAssets}";
+        var metadataSettings =
+            $"{_mappingsSignature}|ignore-missing-faction-assets={profile.IgnoreMissingFactionPrimaryAssets}" +
+            $"|skip-vehicles-without-data-rows={profile.SkipVehiclesWithoutDataRows}";
         var enabledSources = sources.Where(source => source.Enabled).ToArray();
         _environmentKeys = sources.ToDictionary(
             source => source.Id,
@@ -541,7 +616,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             sourceId => new Lazy<Task<ILayerMetadataReader>>(
                 async () => new LayerMetadataReader(
                     await EnsureProviderPool().GetAsync(sourceId, CancellationToken.None),
-                    _profile.IgnoreMissingFactionPrimaryAssets),
+                    _profile.IgnoreMissingFactionPrimaryAssets,
+                    _profile.SkipVehiclesWithoutDataRows),
                 LazyThreadSafetyMode.ExecutionAndPublication));
         return await reader.Value.WaitAsync(cancellationToken);
     }
@@ -706,6 +782,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     private List<LayerRowViewModel> VisibleRows() => LayersView.Cast<LayerRowViewModel>().ToList();
+
+    private static string SelectionId(LayerSelectionPresetItem item) =>
+        $"{item.SourceId}\0{item.GameplayPackagePath}\0{item.GameplayObjectName}";
+
+    private static string SelectionId(LayerDescriptor layer) =>
+        $"{layer.Source.Id}\0{layer.GameplayPackagePath}\0{layer.GameplayObjectName}";
 
     private void RaiseCommandStates()
     {

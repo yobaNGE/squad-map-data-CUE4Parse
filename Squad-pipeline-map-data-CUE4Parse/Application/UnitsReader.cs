@@ -23,14 +23,17 @@ internal sealed class UnitsReader
     private readonly ConcurrentDictionary<string, Lazy<UnitTemplate>> _templates =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public UnitsReader(IGameAssetProvider assets, bool ignoreMissingFactionPrimaryAssets = false)
+    public UnitsReader(
+        IGameAssetProvider assets,
+        bool ignoreMissingFactionPrimaryAssets = false,
+        bool skipVehiclesWithoutDataRows = false)
     {
         _assets = assets;
         _properties = new UnrealPropertyReader(assets);
         _rows = new DataTableRowResolver(_properties);
         _types = new UnitTypeDescriptorIndex(assets);
         _factions = new FactionDefinitionIndex(assets, _properties);
-        _vehicles = new UnitVehicleReader(assets, _properties);
+        _vehicles = new UnitVehicleReader(assets, _properties, skipVehiclesWithoutDataRows);
         _biomes = new LevelBiomeResolver(assets, _properties);
         _ticketRules = new VehicleTicketRulesReader(assets, _properties);
         _commanderAssets = new CommanderAssetsReader(assets);

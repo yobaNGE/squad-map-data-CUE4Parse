@@ -15,6 +15,7 @@ internal sealed class UnitVehicleReader
     private readonly UnrealEnumDisplayNameIndex _vehicleTypes;
     private readonly UnrealEnumDisplayNameIndex _vehicleTags;
     private readonly UnrealEnumDisplayNameIndex _spawnerSizes;
+    private readonly bool _skipVehiclesWithoutDataRows;
     private readonly ConcurrentDictionary<string, Lazy<VehicleSettingsTemplate>> _settings =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Lazy<VehicleClassFacts>> _vehicleClasses =
@@ -22,7 +23,10 @@ internal sealed class UnitVehicleReader
     private readonly ConcurrentDictionary<string, Lazy<IReadOnlyList<UnitVehicleTemplate>>> _unitVehicles =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public UnitVehicleReader(IGameAssetProvider assets, UnrealPropertyReader properties)
+    public UnitVehicleReader(
+        IGameAssetProvider assets,
+        UnrealPropertyReader properties,
+        bool skipVehiclesWithoutDataRows = false)
     {
         _assets = assets;
         _properties = properties;
@@ -33,6 +37,7 @@ internal sealed class UnitVehicleReader
             assets, "/Game/Settings/Vehicle/ESQVehicleTag.ESQVehicleTag");
         _spawnerSizes = new UnrealEnumDisplayNameIndex(
             assets, "/Game/Settings/Spawners/Vehicle/ESQVehicleSpawnerSize.ESQVehicleSpawnerSize");
+        _skipVehiclesWithoutDataRows = skipVehiclesWithoutDataRows;
     }
 
     public IReadOnlyList<ResolvedUnitVehicle> Read(UObject unit, string biome) =>
@@ -83,7 +88,15 @@ internal sealed class UnitVehicleReader
             var settings = _properties.ObjectInherited(availability, "Setting");
             if (settings is null) continue;
 
-            var template = GetSettings(settings);
+            VehicleSettingsTemplate template;
+            try
+            {
+                template = GetSettings(settings);
+            }
+            catch (MissingVehicleDataRowException) when (_skipVehiclesWithoutDataRows)
+            {
+                continue;
+            }
             var vehiclePath = template.SelectVehicle(biome);
             var vehicleClass = _assets.LoadObject(vehiclePath)
                                ?? throw new InvalidDataException($"Unable to load vehicle '{vehiclePath}'.");
@@ -141,7 +154,7 @@ internal sealed class UnitVehicleReader
     private VehicleSettingsTemplate ReadSettings(UObject settings)
     {
         var data = _rows.Resolve(settings)
-                   ?? throw new InvalidDataException($"Vehicle settings '{settings.GetPathName()}' has no Data row.");
+                   ?? throw new MissingVehicleDataRowException(settings.GetPathName());
         var rawTags = _properties.ArrayInherited(settings, "VehicleTags")
             .Select(UnrealPropertyReader.ToStringValue)
             .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -221,6 +234,8 @@ internal sealed class UnitVehicleReader
 
     private sealed record VehicleVersion(string Biome, string VehicleObjectPath);
     private sealed record VehicleClassFacts(string RawType, int PassengerSeats, int DriverSeats);
+    private sealed class MissingVehicleDataRowException(string settingsPath) : Exception(
+        $"Vehicle settings '{settingsPath}' has no Data row.");
 
     private sealed record UnitVehicleTemplate(
         string Type,

@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.RegularExpressions;
 using CUE4Parse.UE4.Assets.Exports;
 using CUE4Parse.UE4.Assets.Exports.Engine;
 using Squad_pipeline_map_data_CUE4Parse.Domain;
@@ -14,7 +13,8 @@ public interface ILayerMetadataReader
 
 public sealed partial class LayerMetadataReader(
     IGameAssetProvider assets,
-    bool ignoreMissingFactionPrimaryAssets = false) : ILayerMetadataReader
+    bool ignoreMissingFactionPrimaryAssets = false,
+    bool skipVehiclesWithoutDataRows = false) : ILayerMetadataReader
 {
     private readonly UnrealPropertyReader _properties = new(assets);
     private readonly LevelDisplayNameIndex _levelNames = new(assets);
@@ -26,7 +26,10 @@ public sealed partial class LayerMetadataReader(
     private readonly LayerFactionSelectionReader _factionSelections = new(assets);
     private readonly TeamConfigsReader _teamConfigs = new(assets);
     private readonly LayerAvailabilityReader _availability = new(new UnrealPropertyReader(assets));
-    private readonly UnitsReader _units = new(assets, ignoreMissingFactionPrimaryAssets);
+    private readonly UnitsReader _units = new(
+        assets,
+        ignoreMissingFactionPrimaryAssets,
+        skipVehiclesWithoutDataRows);
 
     public Task<LayerMetadata> ReadAsync(LayerDescriptor descriptor, CancellationToken cancellationToken = default) =>
         Task.Run(() => Read(descriptor, cancellationToken), cancellationToken);
@@ -72,7 +75,7 @@ public sealed partial class LayerMetadataReader(
             mapId,
             mapName,
             gamemode,
-            ExtractVersion(rawName),
+            descriptor.Version,
             seaLevel,
             geometry.Camera,
             geometry.Border,
@@ -106,12 +109,4 @@ public sealed partial class LayerMetadataReader(
     private int ReadSeaLevel(LayerReadContext context) =>
         _properties.Int(context.WorldSettings, 0, "SeaLevel");
 
-    private static string ExtractVersion(string rawName)
-    {
-        var matches = VersionRegex().Matches(rawName);
-        return matches.Count == 0 ? string.Empty : matches[^1].Groups[1].Value.ToLowerInvariant();
-    }
-
-    [GeneratedRegex(@"(?:^|[_ -])(v\d+(?:[._-]\d+)*)(?=$|[_ -])", RegexOptions.IgnoreCase)]
-    private static partial Regex VersionRegex();
 }

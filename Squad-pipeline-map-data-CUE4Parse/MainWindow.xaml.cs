@@ -52,6 +52,31 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) == true) _viewModel.OutputDirectory = dialog.FolderName;
     }
 
+    private void SaveSelection_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save layer selection",
+            Filter = "Layer selection (*.json)|*.json|All files (*.*)|*.*",
+            DefaultExt = ".json",
+            AddExtension = true,
+            FileName = "squad-layer-selection.json",
+            OverwritePrompt = true
+        };
+        if (dialog.ShowDialog(this) == true) _viewModel.SaveSelection(dialog.FileName);
+    }
+
+    private void LoadSelection_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Load layer selection",
+            Filter = "Layer selection (*.json)|*.json|All files (*.*)|*.*",
+            CheckFileExists = true
+        };
+        if (dialog.ShowDialog(this) == true) _viewModel.LoadSelection(dialog.FileName);
+    }
+
     private void OnErrorOccurred(object? sender, string message) =>
         MessageBox.Show(this, message, "Squad Pipeline", MessageBoxButton.OK, MessageBoxImage.Error);
 

@@ -32,6 +32,7 @@ public sealed record ArchiveProfile
     public string OutputDirectory { get; init; } = Path.Combine(Environment.CurrentDirectory, "output");
     public int ExportParallelism { get; init; } = 2;
     public bool IgnoreMissingFactionPrimaryAssets { get; init; }
+    public bool SkipVehiclesWithoutDataRows { get; init; }
 
     [JsonIgnore]
     public IReadOnlyList<AesKeyEntry> AesKeys { get; init; } = [];
