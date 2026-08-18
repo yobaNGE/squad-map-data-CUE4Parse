@@ -35,6 +35,7 @@ internal sealed class WorldGeometryReader(IGameAssetProvider assets)
         var textureCorners = ReadTextureCorners(worldSettings);
         var border = ReadBorder(context.FindExact("SQMapBoundary"));
         if (border.Count == 0) border = ReadStreamingBorder(context.World);
+        if (border.Count == 0) border = ReadTextureCornerFallback(textureCorners);
         return new WorldGeometry(camera, border, FormatMapSize(border, textureCorners), textureCorners);
     }
 
@@ -126,6 +127,15 @@ internal sealed class WorldGeometryReader(IGameAssetProvider assets)
                 foreach (var border in ReadStreamingLevels(streamedWorld)) yield return border;
             }
         }
+    }
+
+    private static IReadOnlyList<BorderPoint> ReadTextureCornerFallback(
+        IReadOnlyList<MapTextureCorner> textureCorners)
+    {
+        if (textureCorners.Count < 2) return [];
+        return textureCorners.Take(2)
+            .Select((corner, index) => new BorderPoint(index, corner.LocationX, corner.LocationY, corner.LocationZ))
+            .ToArray();
     }
 
     private static int ResolveCornerIndex(string propertyName, string actorName)
