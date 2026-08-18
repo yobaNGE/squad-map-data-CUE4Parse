@@ -7,6 +7,13 @@ internal static class CapturePointNames
     public const string Team1Main = "00-Team1 Main";
     public const string Team2Main = "Z-Team2 Main";
 
+    public static string MainName(int initialTeam, string fallback) => initialTeam switch
+    {
+        1 => Team1Main,
+        2 => Team2Main,
+        _ => fallback
+    };
+
     public static IReadOnlyList<CaptureLink> NormalizeMains(IReadOnlyList<CaptureLink> links)
     {
         var mainPaths = links

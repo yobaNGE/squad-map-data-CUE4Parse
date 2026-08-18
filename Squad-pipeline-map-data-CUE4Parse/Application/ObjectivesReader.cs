@@ -60,7 +60,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
                      .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
-            var name = nodeNames.GetValueOrDefault(main.GetPathName(), GetGraphNodeName(main));
+            var name = GetMainName(main);
             result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), context, transforms, false);
         }
         return result;
@@ -119,7 +119,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
-            var name = nodeNames.GetValueOrDefault(main.GetPathName(), GetGraphNodeName(main));
+            var name = GetMainName(main);
             result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(main.GetPathName()), context, transforms, false);
         }
         return result;
@@ -178,7 +178,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
                      .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
-            var name = nodeNames.GetValueOrDefault(main.GetPathName(), GetGraphNodeName(main));
+            var name = GetMainName(main);
             result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), context, transforms, false);
         }
         return result;
@@ -205,7 +205,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
-            var name = nodeNames.GetValueOrDefault(main.GetPathName(), GetGraphNodeName(main));
+            var name = GetMainName(main);
             result[name] = ReadActor(main, name, "Main", mainPositions.GetValueOrDefault(main.GetPathName()), context, transforms, false);
         }
         return result;
@@ -242,7 +242,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
-            var name = nodeNames.GetValueOrDefault(main.GetPathName(), GetGraphNodeName(main));
+            var name = GetMainName(main);
             result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), context, transforms, false);
         }
         return result;
@@ -472,6 +472,13 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         "BoxComponent" or "SphereComponent" or "CapsuleComponent";
 
     private static string FormatNumber(double value) => value.ToString("0.0#####", CultureInfo.InvariantCulture);
+
+    private string GetMainName(UObject actor)
+    {
+        var captureZone = properties.ObjectInherited(actor, "SQCaptureZone");
+        var initialTeam = properties.IntInherited(captureZone, 0, "InitialTeam");
+        return CapturePointNames.MainName(initialTeam, GetGraphNodeName(actor));
+    }
 
     private string GetGraphNodeName(UObject actor) =>
         properties.String(actor, actor.Name, "ActorLabel");
