@@ -59,8 +59,9 @@ internal sealed class CommanderAssetsReader
                 _properties.ObjectInherited(command, "Texture", "Icon")?.Name ?? string.Empty);
 
             foreach (var factionId in _properties.Array(row, "Team")
-                         .Select(UnrealPropertyReader.ToStringValue)
-                         .Where(value => !string.IsNullOrWhiteSpace(value)))
+                          .Select(UnrealPropertyReader.ToStringValue)
+                          .Where(value => !string.IsNullOrWhiteSpace(value))
+                          .Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 if (!result.TryGetValue(factionId!, out var actions))
                     result[factionId!] = actions = [];
