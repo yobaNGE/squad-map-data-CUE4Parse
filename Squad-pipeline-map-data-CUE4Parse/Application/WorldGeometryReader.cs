@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using CUE4Parse.UE4.Assets.Exports;
@@ -17,8 +16,6 @@ internal sealed record WorldGeometry(
 internal sealed class WorldGeometryReader(IGameAssetProvider assets)
 {
     private readonly UnrealPropertyReader _properties = new(assets);
-    private readonly ConcurrentDictionary<string, Lazy<IReadOnlyList<BorderPoint>>> _sharedBorders =
-        new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly IReadOnlyDictionary<string, int> CornerIndexes =
         new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
@@ -29,7 +26,7 @@ internal sealed class WorldGeometryReader(IGameAssetProvider assets)
             ["Three"] = 3
         };
 
-    public WorldGeometry Read(LayerReadContext context, string worldPackagePath)
+    public WorldGeometry Read(LayerReadContext context)
     {
         var worldSettings = context.WorldSettings
                             ?? throw new InvalidDataException($"World '{context.World.Name}' does not contain SQWorldSettings.");
@@ -37,7 +34,7 @@ internal sealed class WorldGeometryReader(IGameAssetProvider assets)
         var camera = ReadCamera(worldSettings);
         var textureCorners = ReadTextureCorners(worldSettings);
         var border = ReadBorder(context.FindExact("SQMapBoundary"));
-        if (border.Count == 0) border = ReadSharedBorder(worldPackagePath);
+        if (border.Count == 0) border = ReadStreamingBorder(context.World);
         return new WorldGeometry(camera, border, FormatMapSize(border, textureCorners), textureCorners);
     }
 
@@ -81,8 +78,11 @@ internal sealed class WorldGeometryReader(IGameAssetProvider assets)
 
     private IReadOnlyList<BorderPoint> ReadBorder(IReadOnlyList<UObject> exports)
     {
-        var boundary = exports.FirstOrDefault(export =>
-            export.ExportType.Equals("SQMapBoundary", StringComparison.OrdinalIgnoreCase));
+        if (exports.Count == 0) return [];
+        if (exports.Count > 1)
+            throw new InvalidDataException("A level contains more than one SQMapBoundary.");
+
+        var boundary = exports[0];
         var spline = _properties.Object(boundary, "XYBoundary", "RootComponent");
         var curves = _properties.Struct(spline, "SplineCurves");
         var position = _properties.Struct(curves, "Position");
@@ -97,24 +97,35 @@ internal sealed class WorldGeometryReader(IGameAssetProvider assets)
         return border;
     }
 
-    private IReadOnlyList<BorderPoint> ReadSharedBorder(string worldPackagePath)
+    private IReadOnlyList<BorderPoint> ReadStreamingBorder(UObject world)
     {
-        const string gameplayLayers = "/Gameplay_Layers/";
-        var mapPathEnd = worldPackagePath.IndexOf(gameplayLayers, StringComparison.OrdinalIgnoreCase);
-        if (mapPathEnd < 0) return [];
-
-        var mapPath = worldPackagePath[..mapPathEnd];
-        return _sharedBorders.GetOrAdd(mapPath, path => new Lazy<IReadOnlyList<BorderPoint>>(() =>
+        var visitedPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var borders = ReadStreamingLevels(world).Where(border => border.Count > 0).ToArray();
+        return borders.Length switch
         {
-            var boundaries = assets.PackagePaths
-                .Where(package => package.StartsWith($"{path}/Coop/Layers/", StringComparison.OrdinalIgnoreCase))
-                .Where(package => package.EndsWith(".umap", StringComparison.OrdinalIgnoreCase))
-                .Order(StringComparer.OrdinalIgnoreCase)
-                .SelectMany(package => assets.LoadPackageExports(package))
-                .Where(export => export.ExportType.Equals("SQMapBoundary", StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-            return boundaries.Length == 1 ? ReadBorder(boundaries) : [];
-        }, LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+            0 => [],
+            1 => borders[0],
+            _ => throw new InvalidDataException($"World '{world.Name}' streams more than one SQMapBoundary.")
+        };
+
+        IEnumerable<IReadOnlyList<BorderPoint>> ReadStreamingLevels(UObject currentWorld)
+        {
+            foreach (var reference in _properties.Array(currentWorld, "StreamingLevels"))
+            {
+                var streamingLevel = _properties.ResolveObject(reference);
+                var worldAssetPath = UnrealPropertyReader.ToStringValue(_properties.Raw(streamingLevel, "WorldAsset"));
+                var packagePath = worldAssetPath is null ? null : assets.ResolvePackagePath(worldAssetPath);
+                if (packagePath is null || !visitedPackages.Add(packagePath)) continue;
+
+                var streamedWorld = assets.LoadPackageExports(packagePath).FirstOrDefault(export =>
+                    export.ExportType.Equals("World", StringComparison.OrdinalIgnoreCase));
+                if (streamedWorld is null) continue;
+
+                var context = new LayerReadContext(streamedWorld, _properties);
+                yield return ReadBorder(context.FindExact("SQMapBoundary"));
+                foreach (var border in ReadStreamingLevels(streamedWorld)) yield return border;
+            }
+        }
     }
 
     private static int ResolveCornerIndex(string propertyName, string actorName)

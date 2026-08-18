@@ -56,8 +56,7 @@ public sealed partial class LayerMetadataReader(
         var world = ReadFirstWorld(layer);
         var context = new LayerReadContext(world, _properties);
         var seaLevel = ReadSeaLevel(context);
-        var worldPackagePath = assets.ResolvePackagePath(descriptor.WorldObjectPath) ?? string.Empty;
-        var geometry = _worldGeometry.Read(context, worldPackagePath);
+        var geometry = _worldGeometry.Read(context);
         var layerAssets = _layerAssets.Read(context);
         var capturePoints = _capturePoints.Read(context, gamemode);
         var objectives = _objectives.Read(context, gamemode, capturePoints);
