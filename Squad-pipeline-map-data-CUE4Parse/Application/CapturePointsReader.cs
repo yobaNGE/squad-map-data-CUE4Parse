@@ -92,7 +92,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
 
         return CapturePoints.Empty("RAASLane Graph") with
         {
-            Lanes = new CaptureLanes(allLinks, laneNames, lanes)
+            Lanes = new CaptureLanes(allLinks, laneNames, lanes, BuildDirectedGraph(allLinks).PositionsByPath)
         };
     }
 
@@ -118,7 +118,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
             Lanes = new CaptureLanes(links, [laneName], new Dictionary<string, CaptureLane>
             {
                 [laneName] = lane
-            })
+            }, BuildDirectedGraph(links).PositionsByPath)
         };
     }
 

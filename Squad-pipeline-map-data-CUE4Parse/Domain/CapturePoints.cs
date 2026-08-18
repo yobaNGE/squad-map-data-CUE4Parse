@@ -59,7 +59,8 @@ public sealed record CaptureLanes(
     [property: JsonPropertyName("listOfLanes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<string>? ListOfLanes = null,
     [property: JsonPropertyName("laneObjects"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyDictionary<string, CaptureLane>? LaneObjects = null);
+    IReadOnlyDictionary<string, CaptureLane>? LaneObjects = null,
+    [property: JsonIgnore] IReadOnlyDictionary<string, int>? PositionsByPath = null);
 
 public sealed record CaptureLane(
     [property: JsonPropertyName("name")] string Name,

@@ -131,7 +131,6 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
     {
         var transforms = new ObjectiveTransformResolver(properties);
         var clusters = context.FindExact("BP_CaptureZoneCluster_C");
-        var nodeNames = CapturePointNames.ByPath(capturePoints.Lanes.Links);
         var pointsByCluster = new Dictionary<string, List<ObjectivePoint>>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var actor in context.FindExact("BP_CaptureZone_C", "BP_CaptureZoneInvasion_C"))
@@ -151,17 +150,10 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
 
         var clusterOrder = new List<string>();
         var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var laneName in capturePoints.Lanes.ListOfLanes ?? [])
+        foreach (var link in capturePoints.Lanes.Links ?? [])
         {
-            if (capturePoints.Lanes.LaneObjects?.GetValueOrDefault(laneName) is not { } lane) continue;
-            for (var index = 0; index < lane.PointsOrder.Count; index++)
-            {
-                var name = lane.PointsOrder[index];
-                positions.TryAdd(name, index + 1);
-                if (!name.EndsWith(" Main", StringComparison.OrdinalIgnoreCase) &&
-                    !clusterOrder.Contains(name, StringComparer.OrdinalIgnoreCase))
-                    clusterOrder.Add(name);
-            }
+            AddNode(link.NodeAPath, link.NodeA, link.NodeAIsMain);
+            AddNode(link.NodeBPath, link.NodeB, link.NodeBIsMain);
         }
 
         var result = new Dictionary<string, LayerObjective>(StringComparer.OrdinalIgnoreCase);
@@ -182,6 +174,13 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             result[name] = ReadActor(main, name, "Main", positions.GetValueOrDefault(name), context, transforms, false);
         }
         return result;
+
+        void AddNode(string path, string name, bool isMain)
+        {
+            positions.TryAdd(name, capturePoints.Lanes.PositionsByPath?.GetValueOrDefault(path) ?? 0);
+            if (!isMain && !clusterOrder.Contains(name, StringComparer.OrdinalIgnoreCase))
+                clusterOrder.Add(name);
+        }
     }
 
     private IReadOnlyDictionary<string, LayerObjective> ReadSkirmish(
