@@ -57,8 +57,13 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
 
     private CapturePoints ReadRaas(LayerReadContext context)
     {
-        var initializer = FindExport(context, "SQRAASLaneInitializer_C");
         var clusters = context.FindExact("BP_CaptureZoneCluster_C");
+        var nodesWithCapturePoints = FindRaasNodesWithCapturePoints(context, clusters);
+        var graphInitializer = FindExport(context, "SQGraphRAASInitializerComponent");
+        if (graphInitializer is not null)
+            return ReadRaasGraph(graphInitializer, clusters, nodesWithCapturePoints);
+
+        var initializer = FindExport(context, "SQRAASLaneInitializer_C");
         var allLinks = new List<CaptureLink>();
         var laneNames = new List<string>();
         var lanes = new Dictionary<string, CaptureLane>(StringComparer.OrdinalIgnoreCase);
@@ -69,9 +74,11 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
             var laneName = UnrealPropertyReader.ToStringValue(properties.RawStartingWith(lane, "LaneName_"));
             if (string.IsNullOrWhiteSpace(laneName)) continue;
 
-            var laneLinks = CapturePointNames.NormalizeMains(ReadLinks(
-                properties.ArrayStartingWith(lane, "AASLaneLinks_"),
-                actor => GetRaasNodeName(actor, clusters)));
+            var laneLinks = CapturePointNames.NormalizeMains(ProjectRaasLinks(
+                ReadLinks(
+                    properties.ArrayStartingWith(lane, "AASLaneLinks_"),
+                    actor => GetRaasNodeName(actor, clusters)),
+                nodesWithCapturePoints));
             var pointsOrder = BuildPointsOrder(laneLinks);
             laneNames.Add(laneName);
             allLinks.AddRange(laneLinks);
@@ -86,6 +93,32 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         return CapturePoints.Empty("RAASLane Graph") with
         {
             Lanes = new CaptureLanes(allLinks, laneNames, lanes)
+        };
+    }
+
+    private CapturePoints ReadRaasGraph(
+        UObject initializer,
+        IReadOnlyList<UObject> clusters,
+        IReadOnlySet<string> nodesWithCapturePoints)
+    {
+        const string laneName = "RAAS";
+        var links = CapturePointNames.NormalizeMains(ProjectRaasLinks(
+            ReadLinks(initializer, "DesignOutgoingLinks", actor => GetRaasNodeName(actor, clusters)),
+            nodesWithCapturePoints));
+        var pointsOrder = BuildPointsOrder(links);
+        var lane = new CaptureLane(
+            laneName,
+            links,
+            pointsOrder,
+            pointsOrder.Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+            FindMains(pointsOrder));
+
+        return CapturePoints.Empty("RAASLane Graph") with
+        {
+            Lanes = new CaptureLanes(links, [laneName], new Dictionary<string, CaptureLane>
+            {
+                [laneName] = lane
+            })
         };
     }
 
@@ -414,14 +447,16 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
             if (nodeA is null || nodeB is null) continue;
             result.Add(new CaptureLink(
                 $"Link{result.Count}",
-                getNodeName(nodeA),
-                getNodeName(nodeB),
+                GetNodeName(nodeA),
+                GetNodeName(nodeB),
                 nodeA.GetPathName(),
                 nodeB.GetPathName(),
                 IsMain(nodeA),
                 IsMain(nodeB)));
         }
         return result;
+
+        string GetNodeName(UObject actor) => IsMain(actor) ? GetMainName(actor) : getNodeName(actor);
     }
 
     private static DirectedGraph BuildDirectedGraph(IReadOnlyList<CaptureLink> links)
@@ -553,6 +588,65 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
     private static bool IsMain(UObject actor) =>
         actor.ExportType.Equals("BP_CaptureZoneMain_C", StringComparison.OrdinalIgnoreCase);
 
+    private IReadOnlySet<string> FindRaasNodesWithCapturePoints(
+        LayerReadContext context,
+        IReadOnlyList<UObject> clusters)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var captureZone in context.FindExact("BP_CaptureZone_C"))
+        {
+            result.Add(captureZone.GetPathName());
+            if (FindRaasCluster(captureZone, clusters) is { } cluster)
+                result.Add(cluster.GetPathName());
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<CaptureLink> ProjectRaasLinks(
+        IReadOnlyList<CaptureLink> links,
+        IReadOnlySet<string> nodesWithCapturePoints)
+    {
+        var nodes = new Dictionary<string, CaptureGraphNode>(StringComparer.OrdinalIgnoreCase);
+        var outgoing = links.GroupBy(link => link.NodeAPath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        foreach (var link in links)
+        {
+            nodes.TryAdd(link.NodeAPath, new CaptureGraphNode(link.NodeAPath, link.NodeA, link.NodeAIsMain));
+            nodes.TryAdd(link.NodeBPath, new CaptureGraphNode(link.NodeBPath, link.NodeB, link.NodeBIsMain));
+        }
+
+        var result = new List<CaptureLink>();
+        var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in nodes.Values.Where(IsActive))
+        {
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { source.Path };
+            var queue = new Queue<CaptureLink>(outgoing.GetValueOrDefault(source.Path) ?? []);
+            while (queue.TryDequeue(out var link))
+            {
+                if (!visited.Add(link.NodeBPath)) continue;
+                var destination = nodes[link.NodeBPath];
+                if (IsActive(destination))
+                {
+                    if (emitted.Add($"{source.Path}\0{destination.Path}"))
+                        result.Add(new CaptureLink(
+                            $"Link{result.Count}",
+                            source.Name,
+                            destination.Name,
+                            source.Path,
+                            destination.Path,
+                            source.IsMain,
+                            destination.IsMain));
+                    continue;
+                }
+
+                foreach (var next in outgoing.GetValueOrDefault(destination.Path) ?? []) queue.Enqueue(next);
+            }
+        }
+        return result;
+
+        bool IsActive(CaptureGraphNode node) => node.IsMain || nodesWithCapturePoints.Contains(node.Path);
+    }
+
     private string GetCapturePointName(UObject actor)
     {
         var graphName = GetGraphNodeName(actor);
@@ -566,6 +660,13 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         return separator < 0 ? flagName : graphName[..(separator + 1)] + flagName;
     }
 
+    private string GetMainName(UObject actor)
+    {
+        var captureZone = properties.ObjectInherited(actor, "SQCaptureZone");
+        var initialTeam = properties.IntInherited(captureZone, 0, "InitialTeam");
+        return CapturePointNames.MainName(initialTeam, GetGraphNodeName(actor));
+    }
+
     private static UObject? FindExport(LayerReadContext context, string exportType) =>
         context.FindExact(exportType).FirstOrDefault();
 
@@ -574,14 +675,19 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         if (!actor.ExportType.Equals("BP_CaptureZone_C", StringComparison.OrdinalIgnoreCase))
             return GetGraphNodeName(actor);
 
+        var cluster = FindRaasCluster(actor, clusters);
+        return cluster is null ? GetGraphNodeName(actor) : GetGraphNodeName(cluster);
+    }
+
+    private UObject? FindRaasCluster(UObject actor, IReadOnlyList<UObject> clusters)
+    {
         var root = properties.ObjectInherited(actor, "RootComponent", "DefaultSceneRoot");
         var parent = properties.Object(root, "AttachParent");
-        if (parent is null) return GetGraphNodeName(actor);
+        if (parent is null) return null;
 
         var parentPath = parent.GetPathName();
-        var cluster = clusters.FirstOrDefault(candidate =>
+        return clusters.FirstOrDefault(candidate =>
             parentPath.StartsWith(candidate.GetPathName() + ".", StringComparison.OrdinalIgnoreCase));
-        return cluster is null ? GetGraphNodeName(actor) : GetGraphNodeName(cluster);
     }
 
     private string GetGraphNodeName(UObject actor) =>
@@ -594,4 +700,5 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         IReadOnlyDictionary<string, int> PositionsByPath);
 
     private sealed record AasGraphNode(string Name, bool IsMain);
+    private sealed record CaptureGraphNode(string Path, string Name, bool IsMain);
 }
