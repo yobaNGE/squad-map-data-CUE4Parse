@@ -42,6 +42,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private int _exportParallelism = 2;
     private bool _ignoreMissingFactionPrimaryAssets;
     private bool _skipVehiclesWithoutDataRows;
+    private bool _writeExportProfile;
     private string _searchText = string.Empty;
     private string _selectedMap = AllMaps;
     private string _selectedGameMode = AllGameModes;
@@ -167,6 +168,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         get => _skipVehiclesWithoutDataRows;
         set => SetProperty(ref _skipVehiclesWithoutDataRows, value);
+    }
+
+    public bool WriteExportProfile
+    {
+        get => _writeExportProfile;
+        set => SetProperty(ref _writeExportProfile, value);
     }
 
     public string SelectedSource
@@ -367,6 +374,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ExportParallelism = Math.Clamp(profile.ExportParallelism, 1, 8);
         IgnoreMissingFactionPrimaryAssets = profile.IgnoreMissingFactionPrimaryAssets;
         SkipVehiclesWithoutDataRows = profile.SkipVehiclesWithoutDataRows;
+        WriteExportProfile = profile.WriteExportProfile;
         UpdateContentLayout();
         WorkshopPath = UsesWorkshop
             ? _modDiscovery.ResolveWorkshopPath(profile.SquadPath, profile.WorkshopPath)
@@ -500,7 +508,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 _profile.OutputDirectory,
                 progress,
                 ReleaseSourceAsync,
-                cancellationToken);
+                cancellationToken,
+                _profile.WriteExportProfile);
 
             if (report.Failures.Count > 0)
             {
@@ -531,6 +540,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ExportParallelism = Math.Clamp(ExportParallelism, 1, 8),
         IgnoreMissingFactionPrimaryAssets = IgnoreMissingFactionPrimaryAssets,
         SkipVehiclesWithoutDataRows = SkipVehiclesWithoutDataRows,
+        WriteExportProfile = WriteExportProfile,
         Mods = ContentSources.Where(source => source.Mod is not null)
             .Select(source => source.ToModProfile()).ToArray(),
         SdkPlugins = ContentSources.Where(source => source.SdkPlugin is not null)

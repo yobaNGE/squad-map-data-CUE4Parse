@@ -33,6 +33,7 @@ public sealed record ArchiveProfile
     public int ExportParallelism { get; init; } = 2;
     public bool IgnoreMissingFactionPrimaryAssets { get; init; }
     public bool SkipVehiclesWithoutDataRows { get; init; }
+    public bool WriteExportProfile { get; init; }
 
     [JsonIgnore]
     public IReadOnlyList<AesKeyEntry> AesKeys { get; init; } = [];
