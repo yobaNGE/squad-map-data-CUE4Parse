@@ -376,8 +376,8 @@
                                        Margin="0,0,0,20" />
 
                             <CheckBox IsChecked="{Binding SkipVehiclesWithoutDataRows}"
-                                       Content="Skip vehicles without DataTable rows"
-                                       ToolTip="Omits vehicles whose settings asset has no resolvable DataTable row instead of failing the layer export."
+                                       Content="Skip broken vehicle assets"
+                                       ToolTip="Omits a vehicle with no DataTable row or no loadable VehicleVersions. Invalid versions are skipped while valid versions remain."
                                        Margin="0,0,0,20" />
 
                             <Border Background="{StaticResource SurfaceRaisedBrush}" BorderBrush="{StaticResource BorderBrush}"

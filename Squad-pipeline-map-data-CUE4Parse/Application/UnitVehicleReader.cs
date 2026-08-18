@@ -97,6 +97,10 @@ internal sealed class UnitVehicleReader
             {
                 continue;
             }
+            catch (NoLoadableVehicleVersionsException) when (_skipVehiclesWithoutDataRows)
+            {
+                continue;
+            }
             var vehiclePath = template.SelectVehicle(biome);
             var vehicleClass = _assets.LoadObject(vehiclePath)
                                ?? throw new InvalidDataException($"Unable to load vehicle '{vehiclePath}'.");
@@ -170,7 +174,7 @@ internal sealed class UnitVehicleReader
             .ToArray();
 
         if (versions.Length == 0)
-            throw new InvalidDataException($"Vehicle settings '{settings.GetPathName()}' has no VehicleVersions.");
+            throw new NoLoadableVehicleVersionsException(settings.GetPathName());
 
         return new VehicleSettingsTemplate(
             RowValue(data.Row, "DisplayName"),
@@ -194,10 +198,13 @@ internal sealed class UnitVehicleReader
         if (string.IsNullOrWhiteSpace(UnrealPropertyReader.ToStringValue(vehicleReference)))
             return null;
 
-        var vehicle = _properties.ResolveObject(vehicleReference)
-                      ?? throw new InvalidDataException(
-                          $"Vehicle settings '{settingsPath}' has VehicleVersions entry with no loadable Vehicle class " +
-                          $"('{UnrealPropertyReader.ToStringValue(vehicleReference) ?? vehicleReference?.ToString() ?? "empty"}').");
+        var vehicle = _properties.ResolveObject(vehicleReference);
+        if (vehicle is null && _skipVehiclesWithoutDataRows)
+            return null;
+        if (vehicle is null)
+            throw new InvalidDataException(
+                $"Vehicle settings '{settingsPath}' has VehicleVersions entry with no loadable Vehicle class " +
+                $"('{UnrealPropertyReader.ToStringValue(vehicleReference) ?? vehicleReference?.ToString() ?? "empty"}').");
         return new VehicleVersion(VehicleTicketRulesReader.EnumMember(biome) ?? biome, vehicle.GetPathName());
     }
 
@@ -243,6 +250,8 @@ internal sealed class UnitVehicleReader
     private sealed record VehicleClassFacts(string RawType, int PassengerSeats, int DriverSeats);
     private sealed class MissingVehicleDataRowException(string settingsPath) : Exception(
         $"Vehicle settings '{settingsPath}' has no Data row.");
+    private sealed class NoLoadableVehicleVersionsException(string settingsPath) : Exception(
+        $"Vehicle settings '{settingsPath}' has no loadable VehicleVersions.");
 
     private sealed record UnitVehicleTemplate(
         string Type,
