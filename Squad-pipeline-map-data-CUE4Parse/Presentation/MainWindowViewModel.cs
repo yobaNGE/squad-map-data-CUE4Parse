@@ -424,6 +424,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         _profile = BuildProfile();
         DisposeProvider();
         LoadCachedCatalog(_profile);
+        OnPropertyChanged(nameof(HasValidProfile));
+        RaiseCommandStates();
         StatusMessage = $"Rescanned {ContentSources.Count(source => source.IsMod)} mods. Save settings to persist.";
     }
 
@@ -449,6 +451,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         IsSettingsOpen = false;
         RebuildContentSources(profile.Mods, profile.SdkPlugins);
         LoadCachedCatalog(profile);
+        OnPropertyChanged(nameof(HasValidProfile));
+        RaiseCommandStates();
         return Task.CompletedTask;
     }
 
@@ -703,7 +707,35 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         _profileStore.Save(_profile);
         _cache.Invalidate(source.Id);
         UpdateCacheStates();
-        if (source.IsEnabled) await ScanAsync(_profile);
+        if (!source.IsEnabled) return;
+
+        await RunOperationAsync($"Rebuilding {source.Name} cache...", true, async cancellationToken =>
+        {
+            DisposeProvider();
+            PrepareCacheContext(_profile);
+            var currentSource = CurrentSources().First(item =>
+                item.Id.Equals(source.Id, StringComparison.OrdinalIgnoreCase));
+            LayerDescriptor[] rebuilt;
+            try
+            {
+                var provider = await EnsureProviderPool().GetAsync(currentSource.Id, cancellationToken);
+                var scanned = await new LayerCatalogService(provider, currentSource.Id).ScanAsync(cancellationToken);
+                rebuilt = scanned.Where(layer => currentSource.IsVanilla
+                        ? layer.Source.IsVanilla
+                        : layer.Source.Id.Equals(currentSource.Id, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                _cache.SaveCatalog(currentSource, _sourceKeys[currentSource.Id], rebuilt);
+            }
+            finally
+            {
+                await ReleaseSourceAsync(currentSource.Id);
+            }
+            ConfigureMetadataReader();
+            ShowLayers(Layers.Select(layer => layer.Descriptor)
+                .Where(layer => !layer.Source.Id.Equals(currentSource.Id, StringComparison.OrdinalIgnoreCase))
+                .Concat(rebuilt));
+            UpdateCacheStates();
+        });
     }
 
     private void DisposeProvider()
