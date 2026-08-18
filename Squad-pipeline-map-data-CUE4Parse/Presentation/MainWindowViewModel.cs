@@ -62,7 +62,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         OpenSettingsCommand = new RelayCommand(OpenSettings, () => !IsBusy);
         CloseSettingsCommand = new RelayCommand(() => IsSettingsOpen = false, () => !IsBusy);
-        RefreshModsCommand = new RelayCommand(RefreshModsPreview, () => !IsBusy);
+        RefreshModsCommand = new RelayCommand(RefreshMods, () => !IsBusy);
         ResetFiltersCommand = new RelayCommand(ResetFilters);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync, () => !IsBusy);
         RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => !IsBusy && HasValidProfile);
@@ -416,6 +416,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RebuildContentSources(mods, []);
         OnPropertyChanged(nameof(HasMods));
         OnPropertyChanged(nameof(HasNoMods));
+    }
+
+    private void RefreshMods()
+    {
+        RefreshModsPreview();
+        _profile = BuildProfile();
+        DisposeProvider();
+        LoadCachedCatalog(_profile);
+        StatusMessage = $"Rescanned {ContentSources.Count(source => source.IsMod)} mods. Save settings to persist.";
     }
 
     private Task SaveSettingsAsync()
