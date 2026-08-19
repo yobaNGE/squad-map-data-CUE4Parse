@@ -84,7 +84,7 @@ public sealed partial class LayerMetadataReader(
 
         return new LayerMetadataReadResult(new LayerMetadata(
             name,
-            rawName,
+            layerRowName,
             mapId,
             mapName,
             gamemode,
