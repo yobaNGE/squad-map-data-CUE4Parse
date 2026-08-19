@@ -8,21 +8,22 @@ public sealed class ContentSourceSettingsViewModel : ObservableObject
 {
     private bool _isEnabled;
     private SourceCacheState _cacheState;
+    private readonly Action _settingsChanged;
 
     public ContentSourceSettingsViewModel(
         InstalledContentSource source,
         ModArchiveProfile? mod,
         SdkPluginProfile? sdkPlugin,
         SourceCacheState cacheState,
-        Action<ContentSourceSettingsViewModel> clear,
-        Func<ContentSourceSettingsViewModel, Task> rebuild)
+        Func<ContentSourceSettingsViewModel, Task> rebuild,
+        Action settingsChanged)
     {
         Source = source;
         Mod = mod;
         SdkPlugin = sdkPlugin;
         _isEnabled = source.Enabled;
         _cacheState = cacheState;
-        ClearCacheCommand = new RelayCommand(() => clear(this));
+        _settingsChanged = settingsChanged;
         RebuildCacheCommand = new AsyncRelayCommand(() => rebuild(this), () => IsEnabled);
     }
 
@@ -33,6 +34,7 @@ public sealed class ContentSourceSettingsViewModel : ObservableObject
     public string Name => Source.Name;
     public bool IsMod => !Source.IsVanilla;
     public string Version => string.IsNullOrWhiteSpace(Source.Version) ? "Unknown" : Source.Version;
+    public string VersionLabel => IsMod ? $"Mod version: {Version}" : $"Game version: {Version}";
 
     public bool IsEnabled
     {
@@ -41,6 +43,7 @@ public sealed class ContentSourceSettingsViewModel : ObservableObject
         {
             if (!IsMod || !SetProperty(ref _isEnabled, value)) return;
             Source = Source with { Enabled = value };
+            _settingsChanged();
             OnPropertyChanged(nameof(CacheStatus));
             (RebuildCacheCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         }
@@ -55,7 +58,6 @@ public sealed class ContentSourceSettingsViewModel : ObservableObject
         ? "No cached layers"
         : $"{_cacheState.MaterializedLayerCount} of {_cacheState.LayerCount} layers ready";
 
-    public ICommand ClearCacheCommand { get; }
     public ICommand RebuildCacheCommand { get; }
 
     public void UpdateCache(SourceCacheState state)

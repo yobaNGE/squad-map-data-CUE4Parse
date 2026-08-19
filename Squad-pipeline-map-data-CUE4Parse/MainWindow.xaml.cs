@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using Microsoft.Win32;
@@ -75,6 +76,27 @@ public partial class MainWindow : Window
             CheckFileExists = true
         };
         if (dialog.ShowDialog(this) == true) _viewModel.LoadSelection(dialog.FileName);
+    }
+
+    private void OpenOutput_Click(object sender, RoutedEventArgs e)
+    {
+        if (!Directory.Exists(_viewModel.OutputDirectory))
+        {
+            MessageBox.Show(this, "The output directory does not exist yet.", "Squad Pipeline",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo(_viewModel.OutputDirectory) { UseShellExecute = true });
+    }
+
+    private void ClearCache_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ContentSourceSettingsViewModel source) return;
+        var confirmation = MessageBox.Show(this,
+            $"Delete the cached catalog and exported metadata for {source.Name}? You can rebuild it later.",
+            "Clear cache", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (confirmation == MessageBoxResult.Yes) _viewModel.ClearCache(source);
     }
 
     private void OnErrorOccurred(object? sender, string message) =>
