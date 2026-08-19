@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -11,6 +12,9 @@ namespace Squad_pipeline_map_data_CUE4Parse.Configuration;
 public sealed partial class WorkshopModDiscovery
 {
     public const string SquadWorkshopAppId = "393380";
+    private static readonly HttpClient SteamClient = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private const string PublishedFileDetailsUrl =
+        "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/";
 
     public string ResolveWorkshopPath(string squadPath, string? configuredPath = null)
     {
@@ -26,30 +30,38 @@ public sealed partial class WorkshopModDiscovery
             : Path.Combine(current.FullName, "workshop", "content", SquadWorkshopAppId);
     }
 
-    public IReadOnlyList<ModArchiveProfile> Discover(string workshopPath)
+    public async Task<IReadOnlyList<ModArchiveProfile>> DiscoverAsync(string workshopPath)
     {
         if (string.IsNullOrWhiteSpace(workshopPath) || !Directory.Exists(workshopPath)) return [];
 
         var workshopItems = ReadWorkshopItems(workshopPath);
+        var candidates = Directory.EnumerateDirectories(workshopPath)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .Select(itemDirectory => (
+                ItemDirectory: itemDirectory,
+                PluginPath: Directory.EnumerateFiles(itemDirectory, "*.uplugin", SearchOption.TopDirectoryOnly)
+                    .Order(StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault(),
+                PaksDirectory: Path.Combine(itemDirectory, "Content", "Paks", "Windows")))
+            .Where(candidate => candidate.PluginPath is not null && Directory.Exists(candidate.PaksDirectory))
+            .ToArray();
+        var steamTitles = await ReadSteamTitlesAsync(candidates.Select(candidate =>
+            Path.GetFileName(candidate.ItemDirectory)));
         var result = new List<ModArchiveProfile>();
-        foreach (var itemDirectory in Directory.EnumerateDirectories(workshopPath)
-                     .Order(StringComparer.OrdinalIgnoreCase))
+        foreach (var candidate in candidates)
         {
-            var pluginPath = Directory.EnumerateFiles(itemDirectory, "*.uplugin", SearchOption.TopDirectoryOnly)
-                .Order(StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-            var paksDirectory = Path.Combine(itemDirectory, "Content", "Paks", "Windows");
-            if (pluginPath is null || !Directory.Exists(paksDirectory)) continue;
-
-            var id = Path.GetFileName(itemDirectory);
-            var version = ReadModVersion(itemDirectory);
+            var id = Path.GetFileName(candidate.ItemDirectory);
+            var version = ReadModVersion(candidate.ItemDirectory);
             workshopItems.TryGetValue(id, out var workshopItem);
-            var revision = BuildArchiveRevision(paksDirectory) ?? workshopItem.Manifest;
+            var revision = BuildArchiveRevision(candidate.PaksDirectory) ?? workshopItem.Manifest;
             result.Add(new ModArchiveProfile(
                 id,
-                ReadFriendlyName(pluginPath) ?? Path.GetFileNameWithoutExtension(pluginPath),
-                itemDirectory,
-                paksDirectory)
+                steamTitles.GetValueOrDefault(id)
+                ?? ReadFriendlyName(candidate.PluginPath!)
+                ?? Path.GetFileNameWithoutExtension(candidate.PluginPath)
+                ?? id,
+                candidate.ItemDirectory,
+                candidate.PaksDirectory)
             {
                 Version = version,
                 ContentRevision = revision,
@@ -58,6 +70,45 @@ public sealed partial class WorkshopModDiscovery
         }
 
         return result;
+    }
+
+    private static async Task<IReadOnlyDictionary<string, string>> ReadSteamTitlesAsync(IEnumerable<string> ids)
+    {
+        var publishedFileIds = ids.Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (publishedFileIds.Length == 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var fields = new List<KeyValuePair<string, string>> { new("itemcount", publishedFileIds.Length.ToString()) };
+            fields.AddRange(publishedFileIds.Select((id, index) =>
+                new KeyValuePair<string, string>($"publishedfileids[{index}]", id)));
+            using var response = await SteamClient.PostAsync(PublishedFileDetailsUrl, new FormUrlEncodedContent(fields));
+            if (!response.IsSuccessStatusCode)
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+            if (!document.RootElement.TryGetProperty("response", out var responseBody)
+                || !responseBody.TryGetProperty("publishedfiledetails", out var details))
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            var titles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var detail in details.EnumerateArray())
+            {
+                if (!detail.TryGetProperty("result", out var result) || result.GetInt32() != 1
+                    || !detail.TryGetProperty("publishedfileid", out var id)
+                    || !detail.TryGetProperty("title", out var title)
+                    || string.IsNullOrWhiteSpace(title.GetString()))
+                    continue;
+                titles[id.GetString()!] = title.GetString()!.Trim();
+            }
+            return titles;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
     }
 
     private static string ReadModVersion(string itemDirectory)

@@ -19,7 +19,7 @@ try
         SquadPath = options.SquadPath,
         MappingsPath = options.MappingsPath,
         WorkshopPath = workshopPath,
-        Mods = layout.IsEditorSdk ? [] : modDiscovery.Discover(workshopPath),
+        Mods = layout.IsEditorSdk ? [] : await modDiscovery.DiscoverAsync(workshopPath),
         SdkPlugins = layout.IsEditorSdk ? new SdkPluginDiscovery().Discover(options.SquadPath) : [],
         ReadScriptData = false
     };
