@@ -22,14 +22,14 @@ public partial class MainWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e) => await _viewModel.InitializeAsync();
 
-    private void BrowseSquad_Click(object sender, RoutedEventArgs e)
+    private async void BrowseSquad_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFolderDialog
         {
             Title = "Select the Squad installation directory",
             InitialDirectory = Directory.Exists(_viewModel.SquadPath) ? _viewModel.SquadPath : null
         };
-        if (dialog.ShowDialog(this) == true) _viewModel.SetSquadPath(dialog.FolderName);
+        if (dialog.ShowDialog(this) == true) await _viewModel.SetSquadPathAsync(dialog.FolderName);
     }
 
     private void BrowseMappings_Click(object sender, RoutedEventArgs e)

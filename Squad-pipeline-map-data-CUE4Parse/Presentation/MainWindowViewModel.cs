@@ -61,9 +61,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         LayersView = CollectionViewSource.GetDefaultView(Layers);
         LayersView.Filter = FilterLayer;
 
-        OpenSettingsCommand = new RelayCommand(OpenSettings, () => !IsBusy);
+        OpenSettingsCommand = new AsyncRelayCommand(OpenSettingsAsync, () => !IsBusy);
         CloseSettingsCommand = new RelayCommand(CloseSettings, () => !IsBusy);
-        RefreshModsCommand = new RelayCommand(RefreshMods, () => !IsBusy);
+        RefreshModsCommand = new AsyncRelayCommand(RefreshModsAsync, () => !IsBusy);
         ResetFiltersCommand = new RelayCommand(ResetFilters);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync, () => !IsBusy);
         RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => !IsBusy && HasValidProfile);
@@ -370,7 +370,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         _profile = _profileStore.Load();
         LoadEditor(_profile);
-        RefreshModsPreview();
+        await RefreshModsPreviewAsync();
 
         if (!HasValidProfile)
         {
@@ -388,19 +388,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         await Task.CompletedTask;
     }
 
-    public void SetSquadPath(string path)
+    public async Task SetSquadPathAsync(string path)
     {
         SquadPath = path;
         UpdateContentLayout();
         WorkshopPath = UsesWorkshop ? _modDiscovery.ResolveWorkshopPath(path) : string.Empty;
-        RefreshModsPreview();
+        await RefreshModsPreviewAsync();
     }
 
-    public void OpenSettings()
+    private async Task OpenSettingsAsync()
     {
         LoadEditor(_profile);
         ContentSources.Clear();
-        RefreshModsPreview();
+        await RefreshModsPreviewAsync();
         IsSettingsOpen = true;
         ClearSettingsDirty();
     }
@@ -428,7 +428,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             : string.Empty;
     }
 
-    private void RefreshModsPreview()
+    private async Task RefreshModsPreviewAsync()
     {
         UpdateContentLayout();
         if (IsEditorSdk)
@@ -457,7 +457,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (enabled.Count == 0)
             enabled = _profile.Mods.ToDictionary(mod => mod.Id, mod => mod.Enabled, StringComparer.OrdinalIgnoreCase);
 
-        var mods = _modDiscovery.Discover(WorkshopPath)
+        var mods = (await _modDiscovery.DiscoverAsync(WorkshopPath))
             .Select(mod => mod with { Enabled = enabled.GetValueOrDefault(mod.Id, true) })
             .ToArray();
         RebuildContentSources(mods, []);
@@ -465,9 +465,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasNoMods));
     }
 
-    private void RefreshMods()
+    private async Task RefreshModsAsync()
     {
-        RefreshModsPreview();
+        await RefreshModsPreviewAsync();
         MarkSettingsDirty();
         StatusMessage = $"Refreshed {ContentSources.Count(source => source.IsMod)} mods. Save settings to apply changes.";
     }
