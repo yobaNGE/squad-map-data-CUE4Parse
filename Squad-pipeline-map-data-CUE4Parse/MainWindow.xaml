@@ -55,7 +55,8 @@
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Content="Scan enabled content" Command="{Binding RefreshCommand}"
-                            ToolTip="Scans the layer catalogs of vanilla and every enabled mod." Margin="0,0,8,0" />
+                            ToolTip="{Binding ScanContentHint}" ToolTipService.ShowOnDisabled="True"
+                            Margin="0,0,8,0" />
                     <Button Content="Settings" Command="{Binding OpenSettingsCommand}" />
                 </StackPanel>
 
@@ -284,6 +285,7 @@
                 </Grid>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Open output" Click="OpenOutput_Click" IsEnabled="{Binding IsNotBusy}" Margin="0,0,8,0" />
                     <Button Content="Import selection" Click="LoadSelection_Click"
                             IsEnabled="{Binding IsNotBusy}" Margin="0,0,8,0" />
                     <Button Content="Export selection" Click="SaveSelection_Click"
@@ -316,8 +318,11 @@
                             <TextBlock Text="Settings" FontSize="23" FontWeight="SemiBold" />
                             <TextBlock Text="Configure game assets, mappings and export destination."
                                        Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
+                            <TextBlock Text="Unsaved changes" Foreground="{StaticResource AccentHoverBrush}" FontSize="11"
+                                       Margin="0,5,0,0"
+                                       Visibility="{Binding IsSettingsDirty, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
-                        <Button Grid.Column="1" Content="Close" Command="{Binding CloseSettingsCommand}" />
+                        <Button Grid.Column="1" Content="{Binding CloseSettingsLabel}" Command="{Binding CloseSettingsCommand}" />
                     </Grid>
 
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -416,7 +421,9 @@
                                     <TextBlock Text="{Binding AddonSectionSubtitle}"
                                                Foreground="{StaticResource SubtleTextBrush}" FontSize="11" Margin="0,3,0,0" />
                                 </StackPanel>
-                                <Button Grid.Column="1" Content="Rescan" Command="{Binding RefreshModsCommand}" Padding="11,5" />
+                                <Button Grid.Column="1" Content="Refresh mods" Command="{Binding RefreshModsCommand}"
+                                        ToolTip="Redetects installed mods and their content revisions. Save to apply changes."
+                                        Padding="11,5" />
                             </Grid>
 
                             <TextBox Text="{Binding WorkshopPath, UpdateSourceTrigger=PropertyChanged}" Margin="0,8,0,10"
@@ -443,7 +450,7 @@
                                                           Visibility="{Binding IsMod, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                                 <StackPanel Grid.Column="1">
                                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                                    <TextBlock Text="{Binding Version, Mode=OneWay, StringFormat=Installed: {0}}"
+                                                    <TextBlock Text="{Binding VersionLabel, Mode=OneWay}"
                                                                Foreground="{StaticResource MutedTextBrush}" FontSize="11" Margin="0,3,0,0" />
                                                 </StackPanel>
                                                 <Border Grid.Column="2" Background="#20272B" CornerRadius="5" Padding="7,3"
@@ -453,12 +460,11 @@
                                                 <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,0,0"
                                                            Foreground="{StaticResource SubtleTextBrush}" FontSize="11">
                                                     <Run Text="{Binding CacheSize, Mode=OneWay}" /><Run Text=" · " />
-                                                    <Run Text="{Binding CacheLayers, Mode=OneWay}" /><Run Text=" · cached: " />
-                                                    <Run Text="{Binding CachedVersion, Mode=OneWay}" />
+                                                    <Run Text="{Binding CacheLayers, Mode=OneWay}" />
                                                 </TextBlock>
                                                 <StackPanel Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal"
                                                             HorizontalAlignment="Right" Margin="0,9,0,0">
-                                                    <Button Content="Clear cache" Command="{Binding ClearCacheCommand}" Padding="9,4" />
+                                                    <Button Content="Clear cache" Click="ClearCache_Click" Padding="9,4" />
                                                     <Button Content="Rebuild" Command="{Binding RebuildCacheCommand}" Padding="9,4"
                                                             Margin="7,0,0,0" />
                                                 </StackPanel>
@@ -478,7 +484,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Saving does not scan content. Use Scan content to rebuild the catalog."
+                        <TextBlock Text="Saving applies settings but does not scan content. Use Scan enabled content to rebuild catalogs."
                                    Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"
                                    TextWrapping="Wrap" Margin="0,0,20,0" />
                         <Button Grid.Column="1" Content="Save" Style="{StaticResource PrimaryButton}"

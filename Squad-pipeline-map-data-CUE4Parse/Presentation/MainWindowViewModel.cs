@@ -51,6 +51,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string _busyText = string.Empty;
     private bool _isBusy;
     private bool _isSettingsOpen;
+    private bool _isSettingsDirty;
     private bool _isIndeterminate;
     private double _progressValue;
     private double _progressMaximum = 1;
@@ -61,7 +62,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         LayersView.Filter = FilterLayer;
 
         OpenSettingsCommand = new RelayCommand(OpenSettings, () => !IsBusy);
-        CloseSettingsCommand = new RelayCommand(() => IsSettingsOpen = false, () => !IsBusy);
+        CloseSettingsCommand = new RelayCommand(CloseSettings, () => !IsBusy);
         RefreshModsCommand = new RelayCommand(RefreshMods, () => !IsBusy);
         ResetFiltersCommand = new RelayCommand(ResetFilters);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync, () => !IsBusy);
@@ -92,25 +93,37 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public string SquadPath
     {
         get => _squadPath;
-        set => SetProperty(ref _squadPath, value);
+        set
+        {
+            if (SetProperty(ref _squadPath, value)) MarkSettingsDirty();
+        }
     }
 
     public string MappingsPath
     {
         get => _mappingsPath;
-        set => SetProperty(ref _mappingsPath, value);
+        set
+        {
+            if (SetProperty(ref _mappingsPath, value)) MarkSettingsDirty();
+        }
     }
 
     public string OutputDirectory
     {
         get => _outputDirectory;
-        set => SetProperty(ref _outputDirectory, value);
+        set
+        {
+            if (SetProperty(ref _outputDirectory, value)) MarkSettingsDirty();
+        }
     }
 
     public string WorkshopPath
     {
         get => _workshopPath;
-        set => SetProperty(ref _workshopPath, value);
+        set
+        {
+            if (SetProperty(ref _workshopPath, value)) MarkSettingsDirty();
+        }
     }
 
     public bool IsEditorSdk => _contentLayoutKind == ContentLayoutKind.EditorSdk;
@@ -125,13 +138,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public int ExportParallelism
     {
         get => _exportParallelism;
-        set => SetProperty(ref _exportParallelism, value);
+        set
+        {
+            if (SetProperty(ref _exportParallelism, value)) MarkSettingsDirty();
+        }
     }
 
     public bool IgnoreMissingFactionPrimaryAssets
     {
         get => _ignoreMissingFactionPrimaryAssets;
-        set => SetProperty(ref _ignoreMissingFactionPrimaryAssets, value);
+        set
+        {
+            if (SetProperty(ref _ignoreMissingFactionPrimaryAssets, value)) MarkSettingsDirty();
+        }
     }
 
     public string SearchText
@@ -167,13 +186,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public bool SkipVehiclesWithoutDataRows
     {
         get => _skipVehiclesWithoutDataRows;
-        set => SetProperty(ref _skipVehiclesWithoutDataRows, value);
+        set
+        {
+            if (SetProperty(ref _skipVehiclesWithoutDataRows, value)) MarkSettingsDirty();
+        }
     }
 
     public bool WriteExportProfile
     {
         get => _writeExportProfile;
-        set => SetProperty(ref _writeExportProfile, value);
+        set
+        {
+            if (SetProperty(ref _writeExportProfile, value)) MarkSettingsDirty();
+        }
     }
 
     public string SelectedSource
@@ -205,6 +230,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (!SetProperty(ref _isBusy, value)) return;
             OnPropertyChanged(nameof(IsNotBusy));
+            OnPropertyChanged(nameof(ScanContentHint));
             RaiseCommandStates();
         }
     }
@@ -246,6 +272,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                                    && (ContentLayoutDetector.Detect(_profile.SquadPath).IsEditorSdk
                                        ? string.IsNullOrWhiteSpace(_profile.MappingsPath) || File.Exists(_profile.MappingsPath)
                                        : File.Exists(_profile.MappingsPath));
+    public bool IsSettingsDirty => _isSettingsDirty;
+    public string CloseSettingsLabel => IsSettingsDirty ? "Discard changes" : "Close";
+    public string ScanContentHint => IsBusy
+        ? "Wait for the current operation to finish."
+        : HasValidProfile
+            ? "Scans the layer catalogs of vanilla and every enabled mod."
+            : "Save an existing Squad installation and mappings file before scanning.";
 
     public bool? SelectAllVisible
     {
@@ -300,7 +333,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (Layers.Count == 0)
         {
-            ReportError("Scan content before loading a selection.");
+            ReportError("Scan enabled content before loading a selection.");
             return;
         }
 
@@ -342,11 +375,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (!HasValidProfile)
         {
             IsSettingsOpen = true;
+            OnPropertyChanged(nameof(ScanContentHint));
+            RaiseCommandStates();
             return;
         }
 
         _profile = BuildProfile();
         LoadCachedCatalog(_profile);
+        OnPropertyChanged(nameof(HasValidProfile));
+        OnPropertyChanged(nameof(ScanContentHint));
+        RaiseCommandStates();
         await Task.CompletedTask;
     }
 
@@ -364,6 +402,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ContentSources.Clear();
         RefreshModsPreview();
         IsSettingsOpen = true;
+        ClearSettingsDirty();
+    }
+
+    private void CloseSettings()
+    {
+        IsSettingsOpen = false;
+        LoadEditor(_profile);
+        RebuildContentSources(_profile.Mods, _profile.SdkPlugins);
+        ClearSettingsDirty();
     }
 
     private void LoadEditor(ArchiveProfile profile)
@@ -421,12 +468,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void RefreshMods()
     {
         RefreshModsPreview();
-        _profile = BuildProfile();
-        DisposeProvider();
-        LoadCachedCatalog(_profile);
-        OnPropertyChanged(nameof(HasValidProfile));
-        RaiseCommandStates();
-        StatusMessage = $"Rescanned {ContentSources.Count(source => source.IsMod)} mods. Save settings to persist.";
+        MarkSettingsDirty();
+        StatusMessage = $"Refreshed {ContentSources.Count(source => source.IsMod)} mods. Save settings to apply changes.";
     }
 
     private Task SaveSettingsAsync()
@@ -451,9 +494,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         IsSettingsOpen = false;
         RebuildContentSources(profile.Mods, profile.SdkPlugins);
         LoadCachedCatalog(profile);
+        ClearSettingsDirty();
         OnPropertyChanged(nameof(HasValidProfile));
+        OnPropertyChanged(nameof(ScanContentHint));
         RaiseCommandStates();
         return Task.CompletedTask;
+    }
+
+    private void MarkSettingsDirty()
+    {
+        if (!IsSettingsOpen || _isSettingsDirty) return;
+        _isSettingsDirty = true;
+        OnPropertyChanged(nameof(IsSettingsDirty));
+        OnPropertyChanged(nameof(CloseSettingsLabel));
+    }
+
+    private void ClearSettingsDirty()
+    {
+        if (!_isSettingsDirty) return;
+        _isSettingsDirty = false;
+        OnPropertyChanged(nameof(IsSettingsDirty));
+        OnPropertyChanged(nameof(CloseSettingsLabel));
     }
 
     private Task RefreshAsync() => ScanAsync(_profile);
@@ -579,7 +640,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             var mod = mods.FirstOrDefault(candidate => candidate.Id.Equals(source.Id, StringComparison.OrdinalIgnoreCase));
             var sdkPlugin = sdkPlugins.FirstOrDefault(candidate =>
                 candidate.Id.Equals(source.Id, StringComparison.OrdinalIgnoreCase));
-            return new ContentSourceSettingsViewModel(source, mod, sdkPlugin, state, ClearCache, RebuildCacheAsync);
+            return new ContentSourceSettingsViewModel(
+                source, mod, sdkPlugin, state, RebuildCacheAsync, MarkSettingsDirty);
         });
         Replace(ContentSources, rows);
         OnPropertyChanged(nameof(HasMods));
@@ -665,12 +727,29 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void ShowLayers(IEnumerable<LayerDescriptor> descriptors)
     {
-        Layers.Clear();
-        foreach (var descriptor in descriptors.OrderBy(layer => layer.Name, StringComparer.OrdinalIgnoreCase))
-            Layers.Add(new LayerRowViewModel(descriptor, NotifySelectionChanged));
+        var selectedIds = Layers.Where(layer => layer.IsSelected)
+            .Select(layer => SelectionId(layer.Descriptor))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _suppressSelectionNotifications = true;
+        try
+        {
+            Layers.Clear();
+            foreach (var descriptor in descriptors.OrderBy(layer => layer.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                var layer = new LayerRowViewModel(descriptor, NotifySelectionChanged)
+                {
+                    IsSelected = selectedIds.Contains(SelectionId(descriptor))
+                };
+                Layers.Add(layer);
+            }
+        }
+        finally
+        {
+            _suppressSelectionNotifications = false;
+        }
 
         RebuildFilterOptions();
-        ResetFilters();
+        NormalizeFilters();
         var enabledMods = ContentSources.Count(source => source.IsMod && source.IsEnabled);
         StatusMessage = Layers.Count == 0
             ? "No cached layer catalog. Scan enabled content to begin."
@@ -679,6 +758,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasLayers));
         OnPropertyChanged(nameof(HasNoLayers));
         NotifySelectionChanged();
+    }
+
+    private void NormalizeFilters()
+    {
+        if (!MapOptions.Contains(_selectedMap)) _selectedMap = AllMaps;
+        if (!GameModeOptions.Contains(_selectedGameMode)) _selectedGameMode = AllGameModes;
+        if (!SourceOptions.Contains(_selectedSource)) _selectedSource = AllSources;
+        OnPropertyChanged(nameof(SelectedMap));
+        OnPropertyChanged(nameof(SelectedGameMode));
+        OnPropertyChanged(nameof(SelectedSource));
+        RefreshFilter();
     }
 
     private void UpdateCacheStates()
@@ -692,19 +782,24 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void ClearCache(ContentSourceSettingsViewModel source)
+    public void ClearCache(ContentSourceSettingsViewModel source)
     {
         _cache.Clear(source.Id);
         ShowLayers(Layers.Select(layer => layer.Descriptor)
             .Where(layer => !layer.Source.Id.Equals(source.Id, StringComparison.OrdinalIgnoreCase))
             .ToArray());
         UpdateCacheStates();
+        StatusMessage = $"Cleared {source.Name} cache. Rebuild it to restore its layers.";
     }
 
     private async Task RebuildCacheAsync(ContentSourceSettingsViewModel source)
     {
-        _profile = BuildProfile();
-        _profileStore.Save(_profile);
+        if (IsSettingsDirty)
+        {
+            ReportError("Save or discard settings before rebuilding a cache.");
+            return;
+        }
+
         _cache.Invalidate(source.Id);
         UpdateCacheStates();
         if (!source.IsEnabled) return;
@@ -735,6 +830,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 .Where(layer => !layer.Source.Id.Equals(currentSource.Id, StringComparison.OrdinalIgnoreCase))
                 .Concat(rebuilt));
             UpdateCacheStates();
+            StatusMessage = $"Rebuilt {source.Name}: {rebuilt.Length} layers.";
         });
     }
 
