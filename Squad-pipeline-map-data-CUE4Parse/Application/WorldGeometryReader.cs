@@ -93,7 +93,17 @@ internal sealed class WorldGeometryReader(IGameAssetProvider assets)
         foreach (var point in _properties.Array(position, "Points").OfType<IPropertyHolder>())
         {
             var location = relativeLocation + _properties.Vector(point, "OutVal");
-            border.Add(new BorderPoint(border.Count, location.X, location.Y, location.Z));
+            var arriveTangent = _properties.Vector(point, "ArriveTangent");
+            var leaveTangent = _properties.Vector(point, "LeaveTangent");
+            border.Add(new BorderPoint(
+                border.Count,
+                location.X,
+                location.Y,
+                location.Z,
+                arriveTangent.X,
+                arriveTangent.Y,
+                leaveTangent.X,
+                leaveTangent.Y));
         }
         return border;
     }
