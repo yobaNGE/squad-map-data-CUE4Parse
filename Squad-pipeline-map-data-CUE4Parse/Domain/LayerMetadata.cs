@@ -42,7 +42,11 @@ public sealed record BorderPoint(
     [property: JsonPropertyName("point")] int Point,
     [property: JsonPropertyName("location_x")] double LocationX,
     [property: JsonPropertyName("location_y")] double LocationY,
-    [property: JsonPropertyName("location_z")] double LocationZ);
+    [property: JsonPropertyName("location_z")] double LocationZ,
+    [property: JsonPropertyName("arriveTangent_x"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? ArriveTangentX = null,
+    [property: JsonPropertyName("arriveTangent_y"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? ArriveTangentY = null,
+    [property: JsonPropertyName("leaveTangent_x"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? LeaveTangentX = null,
+    [property: JsonPropertyName("leaveTangent_y"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? LeaveTangentY = null);
 
 public sealed record MapTextureCorner(
     [property: JsonPropertyName("point")] int Point,
