@@ -27,7 +27,7 @@ internal static class ObjectiveLayoutResolver
         return gamemode.ToUpperInvariant() switch
         {
             "AAS" => ObjectiveLayout.Aas,
-            "RAAS" => ObjectiveLayout.Raas,
+            "RAAS" or "RVAAS" => ObjectiveLayout.Raas,
             "SKIRMISH" => ObjectiveLayout.Skirmish,
             "TC" or "TERRITORYCONTROL" => ObjectiveLayout.TerritoryControl,
             "SEED" => ObjectiveLayout.Seed,
