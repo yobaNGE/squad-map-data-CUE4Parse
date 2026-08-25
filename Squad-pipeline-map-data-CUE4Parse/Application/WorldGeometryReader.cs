@@ -103,10 +103,22 @@ internal sealed class WorldGeometryReader(IGameAssetProvider assets)
                 arriveTangent.X,
                 arriveTangent.Y,
                 leaveTangent.X,
-                leaveTangent.Y));
+                leaveTangent.Y,
+                ReadSplinePointType(point)));
         }
         return border;
     }
+
+    private string? ReadSplinePointType(IPropertyHolder point) =>
+        UnrealPropertyReader.ToStringValue(_properties.Raw(point, "InterpMode")) switch
+        {
+            "CIM_Linear" => "Linear",
+            "CIM_CurveAuto" => "Curve",
+            "CIM_Constant" => "Constant",
+            "CIM_CurveAutoClamped" => "CurveClamped",
+            "CIM_CurveUser" or "CIM_CurveBreak" => "CurveCustomTangent",
+            _ => null
+        };
 
     private IReadOnlyList<BorderPoint> ReadStreamingBorder(UObject world)
     {
