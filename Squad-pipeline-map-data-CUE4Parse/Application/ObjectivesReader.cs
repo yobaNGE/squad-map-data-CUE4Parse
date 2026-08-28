@@ -34,8 +34,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         foreach (var actor in context.FindExact("BP_CaptureZoneInvasion_C"))
         {
             var cluster = FindParentActor(actor, clusters);
-            if (cluster is null) continue;
-            var clusterName = GetGraphNodeName(cluster);
+            var clusterName = cluster is null ? GetGraphNodeName(actor) : GetGraphNodeName(cluster);
             if (!pointsByCluster.TryGetValue(clusterName, out var points))
                 pointsByCluster[clusterName] = points = [];
             points.Add(ReadPoint(actor, context, transforms, includeDisplayName: false, includeScaling: false));
