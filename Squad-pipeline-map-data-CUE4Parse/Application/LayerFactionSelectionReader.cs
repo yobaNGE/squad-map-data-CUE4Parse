@@ -27,7 +27,40 @@ internal sealed class LayerFactionSelectionReader
             ? ReadFactionList(_properties.Map(layer, "FactionsListTeamTwo"))
             : separated ? [] : common.Value;
 
+        if (team1.Count == 0) team1 = ReadSpecificFactionSetup(layer, 1);
+        if (team2.Count == 0) team2 = ReadSpecificFactionSetup(layer, 2);
+
         return new LayerFactionSelections(separated, team1, team2);
+    }
+
+    // Some layers (Seed in particular) skip the FactionsList pool entirely and pin one
+    // specific faction per team via TeamConfigs[].SpecificFactionSetup instead. That asset
+    // carries the same FactionId/Data-row shape a normal unit reference does, so treat it
+    // as a single-entry faction selection rather than leaving the team with no units.
+    private IReadOnlyList<LayerFactionSelection> ReadSpecificFactionSetup(UObject layer, int teamIndex)
+    {
+        var config = _properties.Array(layer, "TeamConfigs")
+            .Select(_properties.ResolveObject)
+            .Where(candidate => candidate is not null)
+            .Cast<UObject>()
+            .FirstOrDefault(candidate =>
+                ReadTeamIndex(_properties.StringInherited(candidate, string.Empty, "Index")) == teamIndex);
+
+        var setup = _properties.ResolveObject(_properties.RawInherited(config, "SpecificFactionSetup"));
+        if (setup is null) return [];
+
+        var factionId = _properties.StringInherited(setup, string.Empty, "FactionId");
+        if (string.IsNullOrWhiteSpace(factionId)) return [];
+
+        return [new LayerFactionSelection(factionId, new LayerUnitReference(setup.GetPathName(), setup.Name), [])];
+    }
+
+    private static int ReadTeamIndex(string value)
+    {
+        var token = TextFormatting.EnumToken(value).Replace("_", string.Empty);
+        if (token.Equals("TeamOne", StringComparison.OrdinalIgnoreCase)) return 1;
+        if (token.Equals("TeamTwo", StringComparison.OrdinalIgnoreCase)) return 2;
+        return int.TryParse(token, out var index) ? index : -1;
     }
 
     private IReadOnlyList<LayerFactionSelection> ReadFactionList(
