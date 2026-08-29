@@ -27,25 +27,55 @@ internal sealed class LayerFactionSelectionReader
             ? ReadFactionList(_properties.Map(layer, "FactionsListTeamTwo"))
             : separated ? [] : common.Value;
 
-        if (team1.Count == 0) team1 = ReadSpecificFactionSetup(layer, 1);
-        if (team2.Count == 0) team2 = ReadSpecificFactionSetup(layer, 2);
+        // TeamConfigs[].SpecificFactionSetup names an extra guaranteed-available faction per team
+        // that isn't necessarily part of FactionsList (seen on Seed layers in particular) — it adds
+        // to the pool rather than replacing it, so append it when it's not already listed.
+        var (team1Config, team2Config) = ResolveTeamConfigs(layer);
+        team1 = AddSpecificFactionSetup(team1, team1Config);
+        team2 = AddSpecificFactionSetup(team2, team2Config);
 
         return new LayerFactionSelections(separated, team1, team2);
     }
 
-    // Some layers (Seed in particular) skip the FactionsList pool entirely and pin one
-    // specific faction per team via TeamConfigs[].SpecificFactionSetup instead. That asset
-    // carries the same FactionId/Data-row shape a normal unit reference does, so treat it
-    // as a single-entry faction selection rather than leaving the team with no units.
-    private IReadOnlyList<LayerFactionSelection> ReadSpecificFactionSetup(UObject layer, int teamIndex)
+    private IReadOnlyList<LayerFactionSelection> AddSpecificFactionSetup(
+        IReadOnlyList<LayerFactionSelection> factions,
+        UObject? config)
     {
-        var config = _properties.Array(layer, "TeamConfigs")
-            .Select(_properties.ResolveObject)
-            .Where(candidate => candidate is not null)
-            .Cast<UObject>()
-            .FirstOrDefault(candidate =>
-                ReadTeamIndex(_properties.StringInherited(candidate, string.Empty, "Index")) == teamIndex);
+        var specific = ReadSpecificFactionSetup(config);
+        if (specific.Count == 0) return factions;
+        var extra = specific[0];
+        return factions.Any(faction => faction.FactionId.Equals(extra.FactionId, StringComparison.OrdinalIgnoreCase))
+            ? factions
+            : [..factions, extra];
+    }
 
+    // Mirrors TeamConfigsReader's own resolution: a config is matched to a team by explicit
+    // Index first, but a team's config commonly omits Index entirely (implicitly "the other
+    // one"), so whichever config wasn't claimed by the other team fills the remaining slot.
+    private (UObject? Team1, UObject? Team2) ResolveTeamConfigs(UObject layer)
+    {
+        var configObjects = _properties.Array(layer, "TeamConfigs")
+            .Select(_properties.ResolveObject)
+            .Where(config => config is not null)
+            .Cast<UObject>()
+            .ToArray();
+        UObject? team1Object = null;
+        UObject? team2Object = null;
+
+        foreach (var config in configObjects)
+        {
+            var index = ReadTeamIndex(_properties.StringInherited(config, string.Empty, "Index"));
+            if (index == 1 && team1Object is null) team1Object = config;
+            else if (index == 2 && team2Object is null) team2Object = config;
+        }
+        team1Object ??= configObjects.FirstOrDefault(config => !ReferenceEquals(config, team2Object));
+        team2Object ??= configObjects.FirstOrDefault(config => !ReferenceEquals(config, team1Object));
+
+        return (team1Object, team2Object);
+    }
+
+    private IReadOnlyList<LayerFactionSelection> ReadSpecificFactionSetup(UObject? config)
+    {
         var setup = _properties.ResolveObject(_properties.RawInherited(config, "SpecificFactionSetup"));
         if (setup is null) return [];
 
