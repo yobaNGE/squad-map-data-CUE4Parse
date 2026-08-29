@@ -9,7 +9,8 @@ internal enum ObjectiveLayout
     Skirmish,
     TerritoryControl,
     Seed,
-    Destruction
+    Destruction,
+    Tdm
 }
 
 internal static class ObjectiveLayoutResolver
@@ -31,6 +32,7 @@ internal static class ObjectiveLayoutResolver
             "SKIRMISH" => ObjectiveLayout.Skirmish,
             "TC" or "TERRITORYCONTROL" => ObjectiveLayout.TerritoryControl,
             "SEED" => ObjectiveLayout.Seed,
+            "TDM" => ObjectiveLayout.Tdm,
             _ => ObjectiveLayout.Unknown
         };
     }

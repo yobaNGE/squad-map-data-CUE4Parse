@@ -18,6 +18,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         ObjectiveLayout.TerritoryControl => ReadTerritoryControl(context),
         ObjectiveLayout.Seed => ReadSeed(context),
         ObjectiveLayout.Destruction => ReadDestruction(context),
+        ObjectiveLayout.Tdm => ReadTdm(context),
         _ => CapturePoints.Empty()
     };
 
@@ -223,6 +224,23 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
                 .Select(actor => ReadObjectiveSpawnLocation(actor, transforms))
                 .ToArray(),
             DestructionObject = ReadDestructionObject(director, context, transforms)
+        };
+    }
+
+    private CapturePoints ReadTdm(LayerReadContext context)
+    {
+        var transforms = context.Transforms;
+        var mains = context.FindExact("BP_CaptureZoneMain_C")
+            .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var mainNames = mains.Select(GetGraphNodeName).ToArray();
+
+        return CapturePoints.Empty("TDM") with
+        {
+            Points = new CapturePointGraph(
+                mainNames,
+                mainNames.Length,
+                Objectives: mains.Select((main, index) => ReadMainObjective(main, index + 1, transforms)).ToArray())
         };
     }
 
