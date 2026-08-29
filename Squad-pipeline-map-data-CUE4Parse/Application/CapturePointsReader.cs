@@ -233,14 +233,16 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         var mains = context.FindExact("BP_CaptureZoneMain_C")
             .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var mainNames = mains.Select(GetGraphNodeName).ToArray();
+        var mainNames = mains.Select(GetMainName).ToArray();
 
         return CapturePoints.Empty("TDM") with
         {
             Points = new CapturePointGraph(
                 mainNames,
                 mainNames.Length,
-                Objectives: mains.Select((main, index) => ReadMainObjective(main, index + 1, transforms)).ToArray())
+                Objectives: mains
+                    .Select((main, index) => ReadMainObjective(main, index + 1, transforms, mainNames[index]))
+                    .ToArray())
         };
     }
 
@@ -370,9 +372,13 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
             : graphName[..(separator + 1)] + TextFormatting.Prettify(graphName[(separator + 1)..]);
     }
 
-    private CaptureObjective ReadMainObjective(UObject actor, int position, SceneTransformResolver transforms)
+    private CaptureObjective ReadMainObjective(
+        UObject actor,
+        int position,
+        SceneTransformResolver transforms,
+        string? name = null)
     {
-        var name = GetGraphNodeName(actor);
+        name ??= GetGraphNodeName(actor);
         var actorTransform = transforms.ResolveActor(actor);
         var sphere = properties.ObjectInherited(actor, "Sphere");
         var sphereTransform = transforms.ResolveComponent(sphere);
