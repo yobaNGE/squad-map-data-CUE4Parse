@@ -641,13 +641,15 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
 
         paths.Sort((left, right) => StringComparer.Ordinal.Compare(
             string.Join("->", left), string.Join("->", right)));
+        // Every path shares its start and end node, and a branching graph (multiple parallel
+        // lanes between the same two mains, seen on Tatooine/VenatorAssault Seed) can also
+        // reconverge on a shared node mid-route — dedupe across all paths, keeping each node's
+        // first occurrence, instead of assuming only start/end can repeat.
         var order = new List<string>();
-        for (var pathIndex = 0; pathIndex < paths.Count; pathIndex++)
-        {
-            var path = paths[pathIndex];
-            var count = pathIndex < paths.Count - 1 ? path.Count - 1 : path.Count;
-            for (var pointIndex = 0; pointIndex < count; pointIndex++) order.Add(path[pointIndex]);
-        }
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in paths)
+            foreach (var node in path)
+                if (seen.Add(node)) order.Add(node);
         return order;
 
         void AddNode(string node)
