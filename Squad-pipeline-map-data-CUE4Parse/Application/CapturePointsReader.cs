@@ -60,14 +60,14 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
     {
         var clusters = context.FindExact("BP_CaptureZoneCluster_C");
         var nodesWithCapturePoints = FindRaasNodesWithCapturePoints(context, clusters);
-        var graphInitializer = FindExport(context, "SQGraphRAASInitializerComponent");
-        if (graphInitializer is not null)
-            return ReadRaasGraph(graphInitializer, clusters, nodesWithCapturePoints);
 
+        // A layer can carry both a SQRAASLaneInitializer_C (the classic multi-lane
+        // definition) and a SQGraphRAASInitializerComponent (a single-graph representation)
+        // at once — seen on Felucia RAAS V1, where the graph component was a stale subset
+        // missing several lanes. The lane initializer is the richer source when it actually
+        // has lanes, so prefer it and only fall back to the graph component otherwise.
         var initializer = FindExport(context, "SQRAASLaneInitializer_C");
-        var allLinks = new List<CaptureLink>();
-        var laneNames = new List<string>();
-        var lanes = new Dictionary<string, CaptureLane>(StringComparer.OrdinalIgnoreCase);
+        var rawLanes = new List<(string LaneName, IReadOnlyList<CaptureLink> Links)>();
 
         foreach (var value in properties.Array(initializer, "AAS Lanes"))
         {
@@ -80,21 +80,96 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
                     properties.ArrayStartingWith(lane, "AASLaneLinks_"),
                     actor => GetRaasNodeName(actor, clusters)),
                 nodesWithCapturePoints));
-            var pointsOrder = BuildPointsOrder(laneLinks);
-            laneNames.Add(laneName);
-            allLinks.AddRange(laneLinks);
-            lanes[laneName] = new CaptureLane(
-                laneName,
-                laneLinks,
-                pointsOrder,
-                pointsOrder.Distinct(StringComparer.OrdinalIgnoreCase).Count(),
-                FindMains(pointsOrder));
+            rawLanes.Add((laneName, laneLinks));
         }
 
-        return CapturePoints.Empty("RAASLane Graph") with
+        if (rawLanes.Count > 0)
         {
-            Lanes = new CaptureLanes(allLinks, laneNames, lanes, BuildDirectedGraph(allLinks).PositionsByPath)
-        };
+            var allLinks = new List<CaptureLink>();
+            var laneNames = new List<string>();
+            var lanes = new Dictionary<string, CaptureLane>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (laneName, laneLinks) in SplitAmbiguousDepthNodes(rawLanes))
+            {
+                var pointsOrder = BuildPointsOrder(laneLinks);
+                laneNames.Add(laneName);
+                allLinks.AddRange(laneLinks);
+                lanes[laneName] = new CaptureLane(
+                    laneName,
+                    laneLinks,
+                    pointsOrder,
+                    pointsOrder.Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                    FindMains(pointsOrder));
+            }
+
+            return CapturePoints.Empty("RAASLane Graph") with
+            {
+                Lanes = new CaptureLanes(allLinks, laneNames, lanes, BuildDirectedGraph(allLinks).PositionsByPath)
+            };
+        }
+
+        var graphInitializer = FindExport(context, "SQGraphRAASInitializerComponent");
+        return graphInitializer is not null
+            ? ReadRaasGraph(graphInitializer, clusters, nodesWithCapturePoints)
+            : CapturePoints.Empty("RAASLane Graph");
+    }
+
+    // Every lane is normally an independent chain, so a node's depth-from-Main is the same
+    // regardless of which lane reached it — downstream consumers rely on pointPosition being
+    // an unambiguous per-node value. Some layers (Felucia RAAS V1) instead reuse a physical
+    // cluster as a shared junction between lanes at genuinely different depths (e.g. Acklay
+    // River: 3rd node on "North East Lane", 4th on "Mid-NE Lane"). Split any such node into
+    // one distinct instance per depth it's reached at — same underlying actor/points, separate
+    // identity — so pointPosition stays unambiguous everywhere, matching every other layer.
+    private static IReadOnlyList<(string LaneName, IReadOnlyList<CaptureLink> Links)> SplitAmbiguousDepthNodes(
+        IReadOnlyList<(string LaneName, IReadOnlyList<CaptureLink> Links)> lanes)
+    {
+        var laneDepths = lanes.Select(lane => BuildDirectedGraph(lane.Links).PositionsByPath).ToArray();
+        var depthsByPath = new Dictionary<string, SortedSet<int>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var depths in laneDepths)
+            foreach (var (path, depth) in depths)
+            {
+                if (!depthsByPath.TryGetValue(path, out var set))
+                    depthsByPath[path] = set = new SortedSet<int>();
+                set.Add(depth);
+            }
+
+        var suffixByPathAndDepth = new Dictionary<(string Path, int Depth), string>();
+        foreach (var (path, depths) in depthsByPath)
+        {
+            if (depths.Count <= 1) continue;
+            var ordinal = 1;
+            foreach (var depth in depths)
+            {
+                if (ordinal > 1) suffixByPathAndDepth[(path, depth)] = $"#{ordinal}";
+                ordinal++;
+            }
+        }
+
+        if (suffixByPathAndDepth.Count == 0) return lanes;
+
+        var result = new List<(string, IReadOnlyList<CaptureLink>)>(lanes.Count);
+        for (var index = 0; index < lanes.Count; index++)
+        {
+            var (laneName, links) = lanes[index];
+            var depths = laneDepths[index];
+            result.Add((laneName, links.Select(link => link with
+            {
+                NodeA = Rename(link.NodeA, link.NodeAPath),
+                NodeAPath = SuffixPath(link.NodeAPath),
+                NodeB = Rename(link.NodeB, link.NodeBPath),
+                NodeBPath = SuffixPath(link.NodeBPath)
+            }).ToArray()));
+
+            string Rename(string name, string path) => Suffix(path) is { } suffix ? name + suffix : name;
+            string SuffixPath(string path) => Suffix(path) is { } suffix ? path + suffix : path;
+
+            string? Suffix(string path) => depths.TryGetValue(path, out var depth)
+                && suffixByPathAndDepth.TryGetValue((path, depth), out var suffix)
+                ? suffix
+                : null;
+        }
+        return result;
     }
 
     private CapturePoints ReadRaasGraph(
@@ -507,12 +582,13 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
             pointsOrder.Add(nodes[path].Name);
             foreach (var destination in outgoing[path])
             {
+                // A node can be a shared junction between lanes that reach it at different
+                // depths (e.g. two RAAS lanes reconverging mid-route) — keep the shortest
+                // depth rather than failing the whole read over what is only a display hint.
                 var position = positions[path] + 1;
-                if (positions.TryGetValue(destination, out var existingPosition) && existingPosition != position)
-                    throw new InvalidDataException(
-                    $"Capture graph node '{nodes[destination].Name}' has no unambiguous position.");
+                if (!positions.TryGetValue(destination, out var existingPosition) || position < existingPosition)
+                    positions[destination] = position;
 
-                positions[destination] = position;
                 if (--incomingCount[destination] == 0) queue.Enqueue(destination);
             }
         }
@@ -696,7 +772,8 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
 
     private string GetRaasNodeName(UObject actor, IReadOnlyList<UObject> clusters)
     {
-        if (!actor.ExportType.Equals("BP_CaptureZone_C", StringComparison.OrdinalIgnoreCase))
+        if (!actor.ExportType.Equals("BP_CaptureZone_C", StringComparison.OrdinalIgnoreCase) &&
+            !actor.ExportType.Equals("BP_CaptureZoneInvasion_C", StringComparison.OrdinalIgnoreCase))
             return GetGraphNodeName(actor);
 
         var cluster = FindRaasCluster(actor, clusters);
