@@ -235,7 +235,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
     {
         var graph = FindExport(context, "TC_HexGraph_C");
         var transforms = context.Transforms;
-        var mains = context.FindExact("BP_CaptureZoneMain_C")
+        var mains = context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
             .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var mainNames = mains.Select(GetGraphNodeName).ToArray();
@@ -282,7 +282,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
     private CapturePoints ReadDestruction(LayerReadContext context)
     {
         var transforms = context.Transforms;
-        var mains = context.FindExact("BP_CaptureZoneMain_C")
+        var mains = context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
             .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var mainNames = mains.Select(GetGraphNodeName).ToArray();
@@ -305,7 +305,7 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
     private CapturePoints ReadTdm(LayerReadContext context)
     {
         var transforms = context.Transforms;
-        var mains = context.FindExact("BP_CaptureZoneMain_C")
+        var mains = context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
             .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var mainNames = mains.Select(GetMainName).ToArray();
@@ -685,8 +685,13 @@ internal sealed class CapturePointsReader(UnrealPropertyReader properties)
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
 
+    // Sesid's Invasion mains ("00a-MuniMain", "100a-AccMain") use a mod-specific
+    // BP_GCCaptureZoneMain_C blueprint instead of the vanilla BP_CaptureZoneMain_C —
+    // without this they're never recognized as mains, so their raw actor name leaks
+    // through unnormalized and they end up with an empty points array instead of none.
     private static bool IsMain(UObject actor) =>
-        actor.ExportType.Equals("BP_CaptureZoneMain_C", StringComparison.OrdinalIgnoreCase);
+        actor.ExportType.Equals("BP_CaptureZoneMain_C", StringComparison.OrdinalIgnoreCase) ||
+        actor.ExportType.Equals("BP_GCCaptureZoneMain_C", StringComparison.OrdinalIgnoreCase);
 
     private IReadOnlySet<string> FindRaasNodesWithCapturePoints(
         LayerReadContext context,

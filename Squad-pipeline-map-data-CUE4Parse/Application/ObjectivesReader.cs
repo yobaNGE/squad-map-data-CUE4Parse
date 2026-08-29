@@ -56,7 +56,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
                 points);
         }
 
-        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
                      .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetMainName(main);
@@ -115,7 +115,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             result[actor.Name] = ReadCaptureActor(actor, displayName, context, transforms);
         }
 
-        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetMainName(main);
@@ -184,7 +184,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
                 points);
         }
 
-        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
                      .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetMainName(main);
@@ -233,7 +233,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
 
         var mainPositions = capturePoints.Points.PositionsByPath ??
                             new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetMainName(main);
@@ -270,7 +270,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             result[actor.Name] = ReadCaptureActor(actor, displayName, context, transforms);
         }
 
-        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetMainName(main);
