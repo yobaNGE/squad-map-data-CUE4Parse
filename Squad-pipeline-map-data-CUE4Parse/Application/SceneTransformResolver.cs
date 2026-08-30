@@ -42,6 +42,15 @@ internal sealed class SceneTransformResolver(UnrealPropertyReader properties)
         var parentComponent = properties.Object(component, "AttachParent");
         var result = parentComponent is null ? local : Compose(local, ResolveComponent(parentComponent, resolving));
 
+        // bAbsoluteLocation means the component's own RelativeLocation value IS the
+        // world-space location, bypassing the parent chain entirely for it.
+        // bAbsoluteRotation/bAbsoluteScale are deliberately NOT honored: they're commonly set
+        // on collision-shape sub-components purely to keep the editor gizmo unrotated/unscaled,
+        // while the shape's actual bounds still need the parent's rotation/scale composed in
+        // (seen on Fallujah_AAS_v1's "04-CommercialDistrict" Box).
+        if (properties.BoolInherited(component, false, "bAbsoluteLocation"))
+            result = result with { Location = local.Location };
+
         resolving.Remove(path);
         _cache[path] = result;
         return result;

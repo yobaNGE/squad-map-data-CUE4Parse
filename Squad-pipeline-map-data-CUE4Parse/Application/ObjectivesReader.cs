@@ -56,7 +56,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
                 points);
         }
 
-        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
                      .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetMainName(main);
@@ -115,7 +115,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             result[actor.Name] = ReadCaptureActor(actor, displayName, context, transforms);
         }
 
-        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetMainName(main);
@@ -132,19 +132,37 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         var clusters = context.FindExact("BP_CaptureZoneCluster_C");
         var pointsByCluster = new Dictionary<string, List<ObjectivePoint>>(StringComparer.OrdinalIgnoreCase);
 
+        // A cluster reached at genuinely different depths across lanes gets split by
+        // CapturePointsReader into one node per depth (same underlying actor, distinct
+        // identity — e.g. "A2-CaptureZoneCluster_11" and "A2-CaptureZoneCluster_11#2"), so
+        // every objective's pointPosition stays unambiguous. Attach the same points to every
+        // split instance of a cluster, keyed by its real (unsuffixed) path.
+        var namesByPath = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var link in capturePoints.Lanes.Links ?? [])
+        {
+            AddName(link.NodeAPath, link.NodeA);
+            AddName(link.NodeBPath, link.NodeB);
+        }
+
         foreach (var actor in context.FindExact("BP_CaptureZone_C", "BP_CaptureZoneInvasion_C"))
         {
             var cluster = FindParentActor(actor, clusters);
-            var clusterName = cluster is null ? GetGraphNodeName(actor) : GetGraphNodeName(cluster);
-            if (!pointsByCluster.TryGetValue(clusterName, out var points))
-                pointsByCluster[clusterName] = points = [];
-            points.Add(ReadPoint(
+            var basePath = cluster?.GetPathName() ?? actor.GetPathName();
+            var clusterNames = namesByPath.GetValueOrDefault(basePath)
+                                ?? [cluster is null ? GetGraphNodeName(actor) : GetGraphNodeName(cluster)];
+            var point = ReadPoint(
                 actor,
                 context,
                 transforms,
                 includeDisplayName: true,
                 includeScaling: false,
-                GetAasDisplayName(actor, context)));
+                GetAasDisplayName(actor, context));
+            foreach (var clusterName in clusterNames)
+            {
+                if (!pointsByCluster.TryGetValue(clusterName, out var points))
+                    pointsByCluster[clusterName] = points = [];
+                points.Add(point);
+            }
         }
 
         var clusterOrder = new List<string>();
@@ -166,7 +184,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
                 points);
         }
 
-        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
                      .OrderBy(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetMainName(main);
@@ -179,6 +197,21 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             positions.TryAdd(name, capturePoints.Lanes.PositionsByPath?.GetValueOrDefault(path) ?? 0);
             if (!isMain && !clusterOrder.Contains(name, StringComparer.OrdinalIgnoreCase))
                 clusterOrder.Add(name);
+        }
+
+        void AddName(string path, string name)
+        {
+            var basePath = StripSuffix(path);
+            if (!namesByPath.TryGetValue(basePath, out var names))
+                namesByPath[basePath] = names = [];
+            if (!names.Contains(name, StringComparer.OrdinalIgnoreCase))
+                names.Add(name);
+        }
+
+        static string StripSuffix(string path)
+        {
+            var index = path.IndexOf('#');
+            return index < 0 ? path : path[..index];
         }
     }
 
@@ -200,7 +233,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
 
         var mainPositions = capturePoints.Points.PositionsByPath ??
                             new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetMainName(main);
@@ -237,7 +270,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
             result[actor.Name] = ReadCaptureActor(actor, displayName, context, transforms);
         }
 
-        foreach (var main in context.FindExact("BP_CaptureZoneMain_C")
+        foreach (var main in context.FindExact("BP_CaptureZoneMain_C", "BP_GCCaptureZoneMain_C")
                      .OrderByDescending(GetGraphNodeName, StringComparer.OrdinalIgnoreCase))
         {
             var name = GetMainName(main);
@@ -507,16 +540,29 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
                 propertyReader.VectorInherited(component, "RelativeScale3D", Vec3.One));
             var parent = ResolveComponent(propertyReader.Object(component, "AttachParent"), resolving);
             var rotatedLocation = Rotate(local.Location * parent.Scale, parent.Rotation);
-            var result = new SceneTransform(
-                new Vec3(
+
+            // bAbsoluteLocation means the component's own RelativeLocation value IS the
+            // world-space location, bypassing the parent chain entirely for it — seen on
+            // Felucia RAAS V1, where several flag variants (Point Kilo, Blue Plants, ...)
+            // have it set and were placed far off-map when composed with the parent.
+            // bAbsoluteRotation/bAbsoluteScale are deliberately NOT honored: they're commonly
+            // set on collision-shape sub-components (e.g. a capture zone's Box) purely to keep
+            // the editor gizmo unrotated/unscaled, while the shape's actual bounds still need
+            // the parent's rotation/scale composed in (seen on Fallujah_AAS_v1's
+            // "04-CommercialDistrict", whose Box has bAbsoluteRotation set with no local
+            // rotation of its own — dropping the parent's rotation zeroed it out).
+            var location = propertyReader.BoolInherited(component, false, "bAbsoluteLocation")
+                ? local.Location
+                : new Vec3(
                     (float)(parent.Location.X + rotatedLocation.X),
                     (float)(parent.Location.Y + rotatedLocation.Y),
-                    (float)(parent.Location.Z + rotatedLocation.Z)),
-                new Rotator(
-                    parent.Rotation.Pitch + local.Rotation.Pitch,
-                    parent.Rotation.Yaw + local.Rotation.Yaw,
-                    parent.Rotation.Roll + local.Rotation.Roll),
-                parent.Scale * local.Scale);
+                    (float)(parent.Location.Z + rotatedLocation.Z));
+            var rotation = new Rotator(
+                parent.Rotation.Pitch + local.Rotation.Pitch,
+                parent.Rotation.Yaw + local.Rotation.Yaw,
+                parent.Rotation.Roll + local.Rotation.Roll);
+            var scale = parent.Scale * local.Scale;
+            var result = new SceneTransform(location, rotation, scale);
 
             resolving.Remove(path);
             _cache[path] = result;

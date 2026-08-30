@@ -8,7 +8,7 @@ using Squad_pipeline_map_data_CUE4Parse.Infrastructure;
 namespace Squad_pipeline_map_data_CUE4Parse.Application;
 
 internal sealed record WorldGeometry(
-    MapCameraActor Camera,
+    MapCameraActor? Camera,
     IReadOnlyList<BorderPoint> Border,
     string MapSize,
     IReadOnlyList<MapTextureCorner> TextureCorners);
@@ -39,12 +39,15 @@ internal sealed class WorldGeometryReader(IGameAssetProvider assets)
         return new WorldGeometry(camera, border, FormatMapSize(border, textureCorners), textureCorners);
     }
 
-    private MapCameraActor ReadCamera(IPropertyHolder worldSettings)
+    // Not every layer sets MapCameraLocation on its SQWorldSettings — the frontend falls
+    // back to a default camera position when it's absent, so treat it as optional instead
+    // of aborting the whole layer read over one missing cosmetic property.
+    private MapCameraActor? ReadCamera(IPropertyHolder worldSettings)
     {
-        var actor = _properties.Object(worldSettings, "MapCameraLocation")
-                    ?? throw new InvalidDataException("SQWorldSettings does not reference MapCameraLocation.");
-        var component = _properties.Object(actor, "SceneComponent", "RootComponent")
-                        ?? throw new InvalidDataException($"Map camera actor '{actor.Name}' does not have a scene component.");
+        var actor = _properties.Object(worldSettings, "MapCameraLocation");
+        if (actor is null) return null;
+        var component = _properties.Object(actor, "SceneComponent", "RootComponent");
+        if (component is null) return null;
         var location = _properties.Vector(component, "RelativeLocation");
         var rotation = _properties.Rotation(component, "RelativeRotation");
 

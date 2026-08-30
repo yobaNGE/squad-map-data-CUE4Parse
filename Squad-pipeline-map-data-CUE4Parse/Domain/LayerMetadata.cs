@@ -10,7 +10,7 @@ public sealed record LayerMetadata(
     [property: JsonPropertyName("gamemode")] string Gamemode,
     [property: JsonPropertyName("layerVersion")] string LayerVersion,
     [property: JsonPropertyName("seaLevel")] int SeaLevel,
-    [property: JsonPropertyName("mapCameraActor")] MapCameraActor MapCameraActor,
+    [property: JsonPropertyName("mapCameraActor")] MapCameraActor? MapCameraActor,
     [property: JsonPropertyName("border")] IReadOnlyList<BorderPoint> Border,
     [property: JsonPropertyName("mapSize")] string MapSize,
     [property: JsonPropertyName("mapTextureCorners")] IReadOnlyList<MapTextureCorner> MapTextureCorners,
