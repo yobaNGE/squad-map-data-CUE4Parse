@@ -26,7 +26,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         LayerReadContext context,
         CapturePoints capturePoints)
     {
-        var transforms = new ObjectiveTransformResolver(properties);
+        var transforms = new SceneTransformResolver(properties);
         var clusters = context.FindExact("BP_CaptureZoneCluster_C");
         var nodeNames = CapturePointNames.ByPath(capturePoints.Clusters.Links);
         var pointsByCluster = new Dictionary<string, List<ObjectivePoint>>(StringComparer.OrdinalIgnoreCase);
@@ -103,7 +103,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         LayerReadContext context,
         CapturePoints capturePoints)
     {
-        var transforms = new ObjectiveTransformResolver(properties);
+        var transforms = new SceneTransformResolver(properties);
         var positions = capturePoints.Points.PositionsByPath ??
                         new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var nodeNames = CapturePointNames.ByPath(capturePoints.Points.Links);
@@ -128,7 +128,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         LayerReadContext context,
         CapturePoints capturePoints)
     {
-        var transforms = new ObjectiveTransformResolver(properties);
+        var transforms = new SceneTransformResolver(properties);
         var clusters = context.FindExact("BP_CaptureZoneCluster_C");
         var pointsByCluster = new Dictionary<string, List<ObjectivePoint>>(StringComparer.OrdinalIgnoreCase);
 
@@ -219,7 +219,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         LayerReadContext context,
         CapturePoints capturePoints)
     {
-        var transforms = new ObjectiveTransformResolver(properties);
+        var transforms = new SceneTransformResolver(properties);
         var nodeNames = CapturePointNames.ByPath(capturePoints.Points.Links);
         var actorsByPath = context.FindExact("BP_CaptureZone_C")
             .ToDictionary(actor => actor.GetPathName(), StringComparer.OrdinalIgnoreCase);
@@ -253,7 +253,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         LayerReadContext context,
         CapturePoints capturePoints)
     {
-        var transforms = new ObjectiveTransformResolver(properties);
+        var transforms = new SceneTransformResolver(properties);
         var order = capturePoints.Points.PointsOrder ?? [];
         var nodeNames = CapturePointNames.ByPath(capturePoints.Points.Links);
         var positions = order.Select((name, index) => (name, position: index + 1))
@@ -283,7 +283,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         UObject actor,
         string displayName,
         LayerReadContext context,
-        ObjectiveTransformResolver transforms)
+        SceneTransformResolver transforms)
     {
         var transform = transforms.ResolveActor(actor);
         return new ObjectiveActor(
@@ -307,7 +307,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
     private ObjectivePoint ReadPoint(
         UObject actor,
         LayerReadContext context,
-        ObjectiveTransformResolver transforms,
+        SceneTransformResolver transforms,
         bool includeDisplayName,
         bool includeScaling,
         string? displayName = null)
@@ -330,7 +330,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
         string name,
         int? position,
         LayerReadContext context,
-        ObjectiveTransformResolver transforms,
+        SceneTransformResolver transforms,
         bool includeScaling)
     {
         var transform = transforms.ResolveActor(actor);
@@ -348,7 +348,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
     private IReadOnlyList<ObjectiveVolume> ReadVolumes(
         UObject actor,
         LayerReadContext context,
-        ObjectiveTransformResolver transforms,
+        SceneTransformResolver transforms,
         bool includeScaling) => context.OwnedBy(actor)
         .Where(IsVolume)
         .Select(component => ReadVolume(component, transforms, includeScaling))
@@ -360,7 +360,7 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
 
     private VolumeWithRadius? ReadVolume(
         UObject component,
-        ObjectiveTransformResolver transforms,
+        SceneTransformResolver transforms,
         bool includeScaling)
     {
         var transform = transforms.ResolveComponent(component);
@@ -516,76 +516,4 @@ internal sealed class ObjectivesReader(UnrealPropertyReader properties)
 
     private sealed record VolumeWithRadius(ObjectiveVolume Volume, double Radius);
 
-    private sealed class ObjectiveTransformResolver(UnrealPropertyReader propertyReader)
-    {
-        private readonly Dictionary<string, SceneTransform> _cache = new(StringComparer.OrdinalIgnoreCase);
-
-        public SceneTransform ResolveActor(UObject actor) => ResolveComponent(
-            propertyReader.ObjectInherited(actor, "RootComponent", "DefaultSceneRoot"));
-
-        public SceneTransform ResolveComponent(UObject? component) => ResolveComponent(
-            component,
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-
-        private SceneTransform ResolveComponent(UObject? component, ISet<string> resolving)
-        {
-            if (component is null) return SceneTransform.Identity;
-            var path = component.GetPathName();
-            if (_cache.TryGetValue(path, out var cached)) return cached;
-            if (!resolving.Add(path)) return SceneTransform.Identity;
-
-            var local = new SceneTransform(
-                propertyReader.VectorInherited(component, "RelativeLocation"),
-                propertyReader.RotationInherited(component, "RelativeRotation"),
-                propertyReader.VectorInherited(component, "RelativeScale3D", Vec3.One));
-            var parent = ResolveComponent(propertyReader.Object(component, "AttachParent"), resolving);
-            var rotatedLocation = Rotate(local.Location * parent.Scale, parent.Rotation);
-
-            // bAbsoluteLocation means the component's own RelativeLocation value IS the
-            // world-space location, bypassing the parent chain entirely for it — seen on
-            // Felucia RAAS V1, where several flag variants (Point Kilo, Blue Plants, ...)
-            // have it set and were placed far off-map when composed with the parent.
-            // bAbsoluteRotation/bAbsoluteScale are deliberately NOT honored: they're commonly
-            // set on collision-shape sub-components (e.g. a capture zone's Box) purely to keep
-            // the editor gizmo unrotated/unscaled, while the shape's actual bounds still need
-            // the parent's rotation/scale composed in (seen on Fallujah_AAS_v1's
-            // "04-CommercialDistrict", whose Box has bAbsoluteRotation set with no local
-            // rotation of its own — dropping the parent's rotation zeroed it out).
-            var location = propertyReader.BoolInherited(component, false, "bAbsoluteLocation")
-                ? local.Location
-                : new Vec3(
-                    (float)(parent.Location.X + rotatedLocation.X),
-                    (float)(parent.Location.Y + rotatedLocation.Y),
-                    (float)(parent.Location.Z + rotatedLocation.Z));
-            var rotation = new Rotator(
-                parent.Rotation.Pitch + local.Rotation.Pitch,
-                parent.Rotation.Yaw + local.Rotation.Yaw,
-                parent.Rotation.Roll + local.Rotation.Roll);
-            var scale = parent.Scale * local.Scale;
-            var result = new SceneTransform(location, rotation, scale);
-
-            resolving.Remove(path);
-            _cache[path] = result;
-            return result;
-        }
-
-        private static Vec3 Rotate(Vec3 vector, Rotator rotation)
-        {
-            var pitch = rotation.Pitch * Math.PI / 180;
-            var yaw = rotation.Yaw * Math.PI / 180;
-            var roll = rotation.Roll * Math.PI / 180;
-            var cp = Math.Cos(pitch);
-            var sp = Math.Sin(pitch);
-            var cy = Math.Cos(yaw);
-            var sy = Math.Sin(yaw);
-            var cr = Math.Cos(roll);
-            var sr = Math.Sin(roll);
-            return new Vec3(
-                cy * cp * vector.X + (cy * sp * sr - sy * cr) * vector.Y +
-                (cy * sp * cr + sy * sr) * vector.Z,
-                sy * cp * vector.X + (sy * sp * sr + cy * cr) * vector.Y +
-                (sy * sp * cr - cy * sr) * vector.Z,
-                -sp * vector.X + cp * sr * vector.Y + cp * cr * vector.Z);
-        }
-    }
 }
